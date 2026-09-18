@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="A fast, private JSON and XML formatter that runs entirely in your browser." />
+    <meta name="color-scheme" content="dark" />
+    <title>Payload Formatter</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <div class="brand-row">
+            <h1>Payload Formatter</h1>
+            <span class="privacy-pill">Runs locally</span>
+          </div>
+          <p>Paste JSON or XML. The formatter detects the payload type automatically.</p>
+        </div>
+        <span id="typeBadge" class="type-badge" aria-live="polite">Waiting for payload</span>
+      </header>
+
+      <section class="card workspace" aria-label="Payload formatter">
+        <div class="toolbar">
+          <div class="actions" role="group" aria-label="Formatting actions">
+            <button id="formatBtn" class="primary" type="button">Format</button>
+            <button id="copyBtn" type="button">Copy</button>
+            <button id="pasteBtn" type="button">Paste</button>
+            <button id="deleteBtn" class="danger" type="button">Delete</button>
+          </div>
+          <div class="status-area">
+            <span id="statusText" role="status" aria-live="polite">Ready.</span>
+          </div>
+        </div>
+
+        <textarea
+          id="payloadInput"
+          class="editor"
+          spellcheck="false"
+          wrap="off"
+          autocapitalize="off"
+          autocomplete="off"
+          placeholder="Paste JSON or XML here..."
+          aria-label="JSON or XML payload"
+        ></textarea>
+
+        <div class="meta-row" aria-live="polite">
+          <span id="metaText">0 lines · 0 B</span>
+          <span>Draft stays in this tab across refresh.</span>
+        </div>
+      </section>
+
+      <footer>Nothing is uploaded by this page. Formatting happens in your browser.</footer>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
