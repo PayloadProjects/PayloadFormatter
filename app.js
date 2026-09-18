@@ -1,4 +1,4 @@
-import { detectPayloadMode } from './formatter.js';
+import { detectPayloadMode } from './payload-detection.js';
 
 const STORAGE_KEY = 'payload-formatter:draft:v1';
 const MAX_DRAFT_BYTES = 2 * 1024 * 1024;
