@@ -1,0 +1,11 @@
+{
+  "name": "payload-formatter",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "node test.mjs",
+    "build": "node build.mjs",
+    "benchmark": "node benchmark.mjs"
+  }
+}
