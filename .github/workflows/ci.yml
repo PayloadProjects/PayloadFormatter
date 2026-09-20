@@ -4,7 +4,9 @@ on:
   push:
     branches:
       - main
+      - "Tag_#2"
   pull_request:
+  workflow_dispatch:
 
 jobs:
   test:

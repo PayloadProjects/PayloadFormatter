@@ -4,6 +4,9 @@ const STORAGE_KEY = 'payload-formatter:draft:v1';
 const THEME_STORAGE_KEY = 'payload-formatter:theme:v1';
 const MAX_DRAFT_BYTES = 2 * 1024 * 1024;
 const LARGE_UI_PAYLOAD_CHARS = 512 * 1024;
+const BASE_FORMAT_TIMEOUT_MS = 30_000;
+const FORMAT_TIMEOUT_PER_MB_MS = 5_000;
+const MAX_FORMAT_TIMEOUT_MS = 120_000;
 
 const editor = document.querySelector('#payloadInput');
 const formatBtn = document.querySelector('#formatBtn');
@@ -20,8 +23,9 @@ const root = document.documentElement;
 
 let busy = false;
 let requestId = 0;
+let editRevision = 0;
 let persistTimer = 0;
-let worker = createWorker();
+let worker = null;
 const pending = new Map();
 
 initializeTheme();
@@ -29,6 +33,7 @@ restoreDraft();
 refreshUi();
 
 editor.addEventListener('input', () => {
+  editRevision += 1;
   refreshUiForInput();
   scheduleDraftSave();
 });
@@ -89,13 +94,21 @@ function updateThemeControl(theme) {
 async function formatPayload() {
   if (busy) return;
   const text = editor.value;
-  if (!text.trim()) return setStatus('Paste JSON or XML first.', 'error');
+  if (!text) return setStatus('Paste JSON or XML first.', 'error');
 
+  const startedRevision = editRevision;
   setBusy(true);
   setStatus('Formatting…');
   try {
     const result = await runWorker(text);
+
+    if (editRevision !== startedRevision) {
+      setStatus('Input changed while formatting. Your newer edits were kept; press Format again.', 'warning');
+      return;
+    }
+
     editor.value = result.formatted;
+    editRevision += 1;
     refreshUi(result.mode, result);
     saveDraftNow();
 
@@ -141,6 +154,7 @@ async function pastePayload() {
     if (!text) return setStatus('Clipboard does not contain text.', 'error');
 
     insertAtSelectionFast(text);
+    editRevision += 1;
 
     // Keep the paste interaction responsive. Large payloads should become
     // visible before we do any work that scales with the full document size.
@@ -156,7 +170,8 @@ async function pastePayload() {
 function clearPayload() {
   if (!editor.value) return setStatus('Editor is already empty.');
   editor.value = '';
-  sessionStorage.removeItem(STORAGE_KEY);
+  editRevision += 1;
+  clearStoredDraft();
   refreshUi();
   setStatus('Cleared.', 'success');
   editor.focus();
@@ -198,7 +213,7 @@ function refreshUiQuick(text) {
     typeBadge.textContent = mode.toUpperCase();
     typeBadge.classList.add(mode);
   } else {
-    typeBadge.textContent = text.trim() ? 'JSON / XML?' : 'Waiting for payload';
+    typeBadge.textContent = text ? 'JSON / XML?' : 'Waiting for payload';
   }
 
   // String length is O(1). Avoid line-count and UTF-8 byte scans here so a
@@ -215,7 +230,7 @@ function refreshUi(forcedMode = null, metrics = null) {
     typeBadge.textContent = mode.toUpperCase();
     typeBadge.classList.add(mode);
   } else {
-    typeBadge.textContent = text.trim() ? 'JSON / XML?' : 'Waiting for payload';
+    typeBadge.textContent = text ? 'JSON / XML?' : 'Waiting for payload';
   }
 
   const lines = Number.isFinite(metrics?.lineCount) ? metrics.lineCount : countLinesFast(text);
@@ -232,16 +247,27 @@ function saveDraftNow() {
   clearTimeout(persistTimer);
   const text = editor.value;
   if (!text) {
-    sessionStorage.removeItem(STORAGE_KEY);
+    clearStoredDraft();
     return;
   }
   // UTF-8 byte length can never be smaller than the number of UTF-16 code
   // units for plain ASCII-heavy payloads. Skip the expensive byte count early
-  // for drafts that are obviously too large to persist.
-  if (text.length > MAX_DRAFT_BYTES) return;
+  // for drafts that are obviously too large to persist. Also remove any older
+  // small draft so refresh can never resurrect stale content.
+  if (text.length > MAX_DRAFT_BYTES) {
+    clearStoredDraft();
+    return;
+  }
   const bytes = utf8ByteLength(text);
-  if (bytes > MAX_DRAFT_BYTES) return;
+  if (bytes > MAX_DRAFT_BYTES) {
+    clearStoredDraft();
+    return;
+  }
   try { sessionStorage.setItem(STORAGE_KEY, text); } catch (_) {}
+}
+
+function clearStoredDraft() {
+  try { sessionStorage.removeItem(STORAGE_KEY); } catch (_) {}
 }
 
 function restoreDraft() {
@@ -256,25 +282,84 @@ function restoreDraft() {
 
 function createWorker() {
   const instance = new Worker(new URL('./formatter-worker.js', import.meta.url), { type: 'module' });
+
   instance.addEventListener('message', (event) => {
     const message = event.data || {};
     const waiter = pending.get(message.id);
-    if (!waiter) return;
+    if (!waiter || waiter.worker !== instance) return;
+
+    clearTimeout(waiter.timeoutId);
     pending.delete(message.id);
-    message.ok ? waiter.resolve(message.result) : waiter.reject(new Error(message.error || 'Formatting failed.'));
+    message.ok
+      ? waiter.resolve(message.result)
+      : waiter.reject(new Error(message.error || 'Formatting failed.'));
   });
+
   instance.addEventListener('error', () => {
-    for (const waiter of pending.values()) waiter.reject(new Error('Formatting worker failed. Refresh and try again.'));
-    pending.clear();
+    failWorker(instance, 'Formatting worker failed and was restarted. Your input was kept; try Format again.');
   });
+
+  instance.addEventListener('messageerror', () => {
+    failWorker(instance, 'Formatting worker returned an unreadable response and was restarted. Your input was kept; try Format again.');
+  });
+
   return instance;
+}
+
+function getWorker() {
+  if (worker) return worker;
+  worker = createWorker();
+  return worker;
+}
+
+function failWorker(instance, message) {
+  try { instance?.terminate(); } catch (_) {}
+
+  for (const [id, waiter] of pending.entries()) {
+    if (waiter.worker !== instance) continue;
+    clearTimeout(waiter.timeoutId);
+    pending.delete(id);
+    waiter.reject(new Error(message));
+  }
+
+  if (worker === instance) worker = null;
+}
+
+function formatTimeoutFor(textLength) {
+  const sizeMb = Math.ceil(textLength / (1024 * 1024));
+  return Math.min(
+    MAX_FORMAT_TIMEOUT_MS,
+    BASE_FORMAT_TIMEOUT_MS + (sizeMb * FORMAT_TIMEOUT_PER_MB_MS),
+  );
 }
 
 function runWorker(text) {
   const id = ++requestId;
+
   return new Promise((resolve, reject) => {
-    pending.set(id, { resolve, reject });
-    worker.postMessage({ id, text });
+    let instance;
+    try {
+      instance = getWorker();
+    } catch (_) {
+      reject(new Error('Formatting worker could not start. Refresh the page and try again.'));
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      if (!pending.has(id)) return;
+      failWorker(
+        instance,
+        'Formatting took too long and was stopped. Your input was kept; try again or use a smaller payload.',
+      );
+    }, formatTimeoutFor(text.length));
+
+    pending.set(id, { resolve, reject, timeoutId, worker: instance });
+
+    try {
+      instance.postMessage({ id, text });
+    } catch (_) {
+      failWorker(instance, 'Formatting could not be started and the worker was restarted. Your input was kept; try Format again.');
+    }
   });
 }
 
@@ -283,6 +368,7 @@ function setBusy(value) {
   document.body.classList.toggle('busy', value);
   formatBtn.disabled = value;
   clearBtn.disabled = value;
+  pasteBtn.disabled = value;
 }
 
 function setStatus(message, tone = '') {
