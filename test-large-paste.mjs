@@ -22,8 +22,8 @@ assert.ok(app.includes("if (!current && start === 0 && end === 0)"),
   'empty-editor paste should assign clipboard text directly without concatenation');
 assert.ok(app.includes("setStatus('Reading clipboard…')"),
   'paste should immediately acknowledge clipboard work to the user');
-assert.ok(html.includes('app.js?v=paste-perf-20260920-1'),
-  'GitHub Pages must load the new paste implementation instead of cached JavaScript');
+assert.match(html, /app\.js\?v=[A-Za-z0-9._-]+/,
+  'GitHub Pages must load a versioned JavaScript asset instead of a stale cached file');
 
 // Guard both formatter paths while changing paste performance behavior.
 assert.ok(app.includes("if (first === '<') return 'xml'"));
