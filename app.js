@@ -47,14 +47,8 @@ themeToggleBtn?.addEventListener('click', () => {
 });
 
 function initializeTheme() {
-  applyTheme(currentTheme(), { persist: false });
-
-  try {
-    const media = window.matchMedia?.('(prefers-color-scheme: light)');
-    media?.addEventListener?.('change', (event) => {
-      if (!readStoredTheme()) applyTheme(event.matches ? 'light' : 'dark', { persist: false });
-    });
-  } catch (_) {}
+  const saved = readStoredTheme();
+  applyTheme(saved || 'dark', { persist: false });
 }
 
 function readStoredTheme() {
@@ -84,8 +78,8 @@ function applyTheme(theme, { persist = false } = {}) {
 function updateThemeControl(theme) {
   if (!themeToggleBtn) return;
   const next = theme === 'light' ? 'dark' : 'light';
-  if (themeIcon) themeIcon.textContent = theme === 'light' ? '☀' : '☾';
-  if (themeLabel) themeLabel.textContent = theme === 'light' ? 'Light' : 'Dark';
+  if (themeIcon) themeIcon.textContent = theme === 'light' ? '☾' : '☀';
+  if (themeLabel) themeLabel.textContent = theme === 'light' ? 'Dark mode' : 'Light mode';
   themeToggleBtn.dataset.theme = theme;
   themeToggleBtn.setAttribute('aria-label', `Switch to ${next} mode`);
   themeToggleBtn.title = `Switch to ${next} mode`;

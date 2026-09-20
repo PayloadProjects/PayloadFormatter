@@ -13,8 +13,6 @@
           const saved = localStorage.getItem(storageKey);
           if (saved === 'light' || saved === 'dark') {
             theme = saved;
-          } else if (window.matchMedia?.('(prefers-color-scheme: light)').matches) {
-            theme = 'light';
           }
         } catch (_) {}
         document.documentElement.dataset.theme = theme;
@@ -36,8 +34,8 @@
         </div>
         <div class="topbar-controls">
           <button id="themeToggleBtn" class="theme-toggle" type="button" aria-label="Switch to light mode" title="Switch to light mode">
-            <span id="themeIcon" class="theme-icon" aria-hidden="true">☾</span>
-            <span id="themeLabel">Dark</span>
+            <span id="themeIcon" class="theme-icon" aria-hidden="true">☀</span>
+            <span id="themeLabel">Light mode</span>
           </button>
           <span id="typeBadge" class="type-badge" aria-live="polite">Waiting for payload</span>
         </div>
