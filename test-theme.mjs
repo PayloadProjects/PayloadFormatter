@@ -9,8 +9,8 @@ const [html, css, app, pkg] = await Promise.all([
 ]);
 
 assert.ok(html.includes('id="themeToggleBtn"'), 'theme toggle button must exist');
-assert.ok(html.includes('style.css?v=theme-20260920-2'), 'theme CSS must use a versioned URL so GitHub Pages cannot serve stale styles');
-assert.ok(html.includes('app.js?v=theme-20260920-2'), 'theme JavaScript must use a versioned URL so GitHub Pages cannot serve a stale click handler');
+assert.ok(html.includes('style.css?v=compact-20260920-1'), 'theme CSS must use a versioned URL so GitHub Pages cannot serve stale styles');
+assert.ok(html.includes('app.js?v=compact-20260920-1'), 'theme JavaScript must use a versioned URL so GitHub Pages cannot serve a stale click handler');
 assert.ok(html.includes('content="dark light"'), 'document must advertise both supported color schemes');
 assert.ok(html.includes("payload-formatter:theme:v1"), 'theme must be applied before CSS to avoid a startup flash');
 assert.ok(!html.includes("prefers-color-scheme: light"), 'first visit should keep the formatter\'s existing dark default');
@@ -35,3 +35,14 @@ assert.ok(packageJson.scripts.test.includes('test.mjs'));
 assert.ok(packageJson.scripts.test.includes('test-theme.mjs'));
 
 console.log('All Payload Formatter theme regression tests passed.');
+
+const clearIndex = html.indexOf('id="clearBtn"');
+const pasteIndex = html.indexOf('id="pasteBtn"');
+const formatIndex = html.indexOf('id="formatBtn"');
+const copyIndex = html.indexOf('id="copyBtn"');
+assert.ok(clearIndex < pasteIndex && pasteIndex < formatIndex && formatIndex < copyIndex,
+  'compact action order must remain Clear → Paste → Format → Copy');
+assert.ok(html.indexOf('id="payloadInput"') < html.indexOf('class="toolbar"'),
+  'compact layout must keep the action bar below the editor');
+assert.ok(css.includes('height: calc(100vh - 150px)'), 'editor should dominate the viewport in the compact layout');
+assert.ok(css.includes('--page-bg: #3d3d3d'), 'dark mode should use the compact neutral gray palette');

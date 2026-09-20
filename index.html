@@ -20,40 +20,32 @@
       })();
     </script>
     <title>JSON/XML Formatter</title>
-    <link rel="stylesheet" href="./style.css?v=theme-20260920-2" />
+    <link rel="stylesheet" href="./style.css?v=compact-20260920-1" />
   </head>
   <body>
     <main class="shell">
       <header class="topbar">
-        <div>
-          <div class="title-row">
-            <h1>JSON/XML Formatter</h1>
-            <span class="privacy-pill">Runs locally</span>
-          </div>
-          <p>Paste JSON or XML. The formatter detects the payload type automatically.</p>
+        <div class="brand-row">
+          <h1>JSON/XML Formatter</h1>
+          <span class="privacy-pill">Local only</span>
         </div>
+
         <div class="topbar-controls">
-          <button id="themeToggleBtn" class="theme-toggle" type="button" aria-label="Switch to light mode" title="Switch to light mode">
+          <span id="typeBadge" class="type-badge" aria-live="polite">Waiting for payload</span>
+          <button
+            id="themeToggleBtn"
+            class="theme-toggle"
+            type="button"
+            aria-label="Switch to light mode"
+            title="Switch to light mode"
+          >
             <span id="themeIcon" class="theme-icon" aria-hidden="true">☀</span>
             <span id="themeLabel">Light mode</span>
           </button>
-          <span id="typeBadge" class="type-badge" aria-live="polite">Waiting for payload</span>
         </div>
       </header>
 
-      <section class="card workspace" aria-label="JSON/XML formatter">
-        <div class="toolbar">
-          <div class="actions" role="group" aria-label="Formatting actions">
-            <button id="clearBtn" class="danger" type="button">Clear</button>
-            <button id="pasteBtn" type="button">Paste</button>
-            <button id="formatBtn" class="primary" type="button">Format</button>
-            <button id="copyBtn" type="button">Copy</button>
-          </div>
-          <div class="status-area">
-            <span id="statusText" role="status" aria-live="polite">Ready.</span>
-          </div>
-        </div>
-
+      <section class="workspace" aria-label="JSON/XML formatter">
         <textarea
           id="payloadInput"
           class="editor"
@@ -65,15 +57,27 @@
           aria-label="JSON or XML payload"
         ></textarea>
 
-        <div class="meta-row" aria-live="polite">
-          <span id="metaText">0 lines · 0 B</span>
+        <div class="toolbar">
+          <div class="actions" role="group" aria-label="Formatting actions">
+            <button id="clearBtn" class="danger" type="button">Clear</button>
+            <button id="pasteBtn" type="button">Paste</button>
+            <button id="formatBtn" class="primary" type="button">Format</button>
+            <button id="copyBtn" type="button">Copy</button>
+          </div>
+
+          <div class="status-area">
+            <span id="statusText" role="status" aria-live="polite">Ready.</span>
+            <span id="metaText" class="meta-text">0 lines · 0 B</span>
+          </div>
+        </div>
+
+        <div class="workspace-note">
           <span>Draft stays in this tab across refresh.</span>
+          <span>Nothing is uploaded.</span>
         </div>
       </section>
-
-      <footer>Nothing is uploaded by this page. Formatting happens in your browser.</footer>
     </main>
 
-    <script type="module" src="./app.js?v=theme-20260920-2"></script>
+    <script type="module" src="./app.js?v=compact-20260920-1"></script>
   </body>
 </html>
