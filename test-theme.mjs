@@ -9,8 +9,8 @@ const [html, css, app, pkg] = await Promise.all([
 ]);
 
 assert.ok(html.includes('id="themeToggleBtn"'), 'theme toggle button must exist');
-assert.ok(html.includes('style.css?v=compact-20260920-1'), 'theme CSS must use a versioned URL so GitHub Pages cannot serve stale styles');
-assert.ok(html.includes('app.js?v=compact-20260920-1'), 'theme JavaScript must use a versioned URL so GitHub Pages cannot serve a stale click handler');
+assert.match(html, /style\.css\?v=[A-Za-z0-9._-]+/, 'theme CSS must use a versioned URL so GitHub Pages cannot serve stale styles');
+assert.match(html, /app\.js\?v=[A-Za-z0-9._-]+/, 'theme JavaScript must use a versioned URL so GitHub Pages cannot serve a stale click handler');
 assert.ok(html.includes('content="dark light"'), 'document must advertise both supported color schemes');
 assert.ok(html.includes("payload-formatter:theme:v1"), 'theme must be applied before CSS to avoid a startup flash');
 assert.ok(!html.includes("prefers-color-scheme: light"), 'first visit should keep the formatter\'s existing dark default');
