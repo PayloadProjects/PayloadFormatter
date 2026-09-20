@@ -44,9 +44,15 @@ assert.ok(clearIndex < pasteIndex && pasteIndex < formatIndex && formatIndex < c
   'compact action order must remain Clear → Paste → Format → Copy');
 assert.ok(html.indexOf('id="payloadInput"') < html.indexOf('class="toolbar"'),
   'compact layout must keep the action bar below the editor');
-assert.match(css, /height:\s*calc\(100vh\s*-\s*\d+px\)/, 'editor should dominate the viewport in the compact layout');
+assert.ok(css.includes('height: 100dvh'), 'app shell should be constrained to the dynamic viewport height');
+assert.ok(css.includes('overflow: hidden'), 'page-level overflow should be contained');
+assert.ok(css.includes('resize: none'), 'editor must not be vertically resizable beyond the viewport');
+assert.ok(css.includes('flex: 1'), 'editor workspace should consume remaining viewport space');
 assert.ok(css.includes('.brand-mark') && css.includes('.editor-strip'), 'formatter should keep a distinct branded compact identity');
 
 assert.ok(html.includes('class="brand-mark"'), 'formatter should expose a compact brand mark');
 assert.ok(html.includes('class="editor-strip"'), 'editor should have its own compact payload strip');
 assert.ok(html.includes('Ctrl/Cmd + Enter to format.'), 'keyboard formatting shortcut should be discoverable');
+
+assert.ok(html.includes('style.css?v=viewport-20260920-1'),
+  'viewport scrollbar fix must bypass stale cached CSS');
