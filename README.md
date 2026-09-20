@@ -5,6 +5,7 @@ A focused browser-only formatter for JSON and XML.
 ## Features
 
 - Automatic JSON/XML detection
+- Dark and light themes with a saved browser preference
 - Format JSON and XML in one large editor
 - Copy, Paste, and Delete actions
 - Best-effort formatting for escaped, nested, and irregular JSON/XML input

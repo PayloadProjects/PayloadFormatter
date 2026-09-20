@@ -1,10 +1,26 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="A fast, private JSON and XML formatter that runs entirely in your browser." />
-    <meta name="color-scheme" content="dark" />
+    <meta name="color-scheme" content="dark light" />
+    <script>
+      (() => {
+        const storageKey = 'payload-formatter:theme:v1';
+        let theme = 'dark';
+        try {
+          const saved = localStorage.getItem(storageKey);
+          if (saved === 'light' || saved === 'dark') {
+            theme = saved;
+          } else if (window.matchMedia?.('(prefers-color-scheme: light)').matches) {
+            theme = 'light';
+          }
+        } catch (_) {}
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+      })();
+    </script>
     <title>Payload Formatter</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
@@ -18,7 +34,13 @@
           </div>
           <p>Paste JSON or XML. The formatter detects the payload type automatically.</p>
         </div>
-        <span id="typeBadge" class="type-badge" aria-live="polite">Waiting for payload</span>
+        <div class="topbar-controls">
+          <button id="themeToggleBtn" class="theme-toggle" type="button" aria-label="Switch to light mode" title="Switch to light mode">
+            <span id="themeIcon" class="theme-icon" aria-hidden="true">☾</span>
+            <span id="themeLabel">Dark</span>
+          </button>
+          <span id="typeBadge" class="type-badge" aria-live="polite">Waiting for payload</span>
+        </div>
       </header>
 
       <section class="card workspace" aria-label="Payload formatter">

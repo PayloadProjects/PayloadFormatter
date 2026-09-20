@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "test": "node test.mjs",
+    "test": "node test.mjs && node test-theme.mjs",
     "build": "node build.mjs",
     "benchmark": "node benchmark.mjs"
   }
