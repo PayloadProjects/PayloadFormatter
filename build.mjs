@@ -2,6 +2,7 @@ import { rm, mkdir, copyFile } from 'node:fs/promises';
 
 const files = [
   'index.html',
+  'favicon.svg',
   'style.css',
   'app.js',
   'formatter-worker.js',
