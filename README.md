@@ -1,4 +1,4 @@
-# Payload Formatter
+# JSON/XML Formatter
 
 A focused browser-only formatter for JSON and XML.
 
