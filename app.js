@@ -3,6 +3,7 @@ import { detectPayloadMode } from './payload-detection.js';
 const STORAGE_KEY = 'payload-formatter:draft:v1';
 const THEME_STORAGE_KEY = 'payload-formatter:theme:v1';
 const MAX_DRAFT_BYTES = 2 * 1024 * 1024;
+const LARGE_UI_PAYLOAD_CHARS = 512 * 1024;
 
 const editor = document.querySelector('#payloadInput');
 const formatBtn = document.querySelector('#formatBtn');
@@ -28,7 +29,7 @@ restoreDraft();
 refreshUi();
 
 editor.addEventListener('input', () => {
-  refreshUi();
+  refreshUiForInput();
   scheduleDraftSave();
 });
 editor.addEventListener('keydown', (event) => {
@@ -134,11 +135,17 @@ async function copyPayload() {
 async function pastePayload() {
   try {
     if (!navigator.clipboard?.readText) throw new Error('Clipboard read is unavailable.');
+
+    setStatus('Reading clipboard…');
     const text = await navigator.clipboard.readText();
     if (!text) return setStatus('Clipboard does not contain text.', 'error');
-    insertAtSelection(text);
-    refreshUi();
-    saveDraftNow();
+
+    insertAtSelectionFast(text);
+
+    // Keep the paste interaction responsive. Large payloads should become
+    // visible before we do any work that scales with the full document size.
+    refreshUiForInput();
+    scheduleDraftSave();
     setStatus('Pasted from clipboard.', 'success');
   } catch (error) {
     editor.focus();
@@ -155,11 +162,49 @@ function clearPayload() {
   editor.focus();
 }
 
-function insertAtSelection(text) {
-  const start = editor.selectionStart ?? editor.value.length;
-  const end = editor.selectionEnd ?? editor.value.length;
-  editor.setRangeText(text, start, end, 'end');
-  editor.dispatchEvent(new Event('input', { bubbles: true }));
+function insertAtSelectionFast(text) {
+  const current = editor.value;
+  const start = editor.selectionStart ?? current.length;
+  const end = editor.selectionEnd ?? current.length;
+
+  // Assigning .value directly avoids the extra synchronous input event and
+  // duplicate full-document bookkeeping that setRangeText + dispatchEvent
+  // caused for multi-megabyte clipboard payloads.
+  if (!current && start === 0 && end === 0) {
+    editor.value = text;
+  } else {
+    editor.value = current.slice(0, start) + text + current.slice(end);
+  }
+
+  const caret = start + text.length;
+  try { editor.setSelectionRange(caret, caret); } catch (_) {}
+  editor.focus();
+}
+
+function refreshUiForInput() {
+  const text = editor.value;
+  if (text.length >= LARGE_UI_PAYLOAD_CHARS) {
+    refreshUiQuick(text);
+    return;
+  }
+  refreshUi();
+}
+
+function refreshUiQuick(text) {
+  const mode = detectModeFast(text);
+  typeBadge.classList.remove('json', 'xml');
+
+  if (mode) {
+    typeBadge.textContent = mode.toUpperCase();
+    typeBadge.classList.add(mode);
+  } else {
+    typeBadge.textContent = text.trim() ? 'JSON / XML?' : 'Waiting for payload';
+  }
+
+  // String length is O(1). Avoid line-count and UTF-8 byte scans here so a
+  // large paste can paint immediately. Exact metrics are available after
+  // formatting, when the worker already returns them.
+  metaText.textContent = `${formatCharacterCount(text.length)} chars · large payload`;
 }
 
 function refreshUi(forcedMode = null, metrics = null) {
@@ -287,6 +332,12 @@ function utf8ByteLength(text) {
     }
   }
   return bytes;
+}
+
+function formatCharacterCount(chars) {
+  if (chars < 1000) return chars.toLocaleString();
+  if (chars < 1_000_000) return `${(chars / 1000).toFixed(1)}K`;
+  return `${(chars / 1_000_000).toFixed(2)}M`;
 }
 
 function formatBytes(bytes) {
