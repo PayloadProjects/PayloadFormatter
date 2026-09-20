@@ -44,5 +44,9 @@ assert.ok(clearIndex < pasteIndex && pasteIndex < formatIndex && formatIndex < c
   'compact action order must remain Clear → Paste → Format → Copy');
 assert.ok(html.indexOf('id="payloadInput"') < html.indexOf('class="toolbar"'),
   'compact layout must keep the action bar below the editor');
-assert.ok(css.includes('height: calc(100vh - 150px)'), 'editor should dominate the viewport in the compact layout');
-assert.ok(css.includes('--page-bg: #3d3d3d'), 'dark mode should use the compact neutral gray palette');
+assert.match(css, /height:\s*calc\(100vh\s*-\s*\d+px\)/, 'editor should dominate the viewport in the compact layout');
+assert.ok(css.includes('.brand-mark') && css.includes('.editor-strip'), 'formatter should keep a distinct branded compact identity');
+
+assert.ok(html.includes('class="brand-mark"'), 'formatter should expose a compact brand mark');
+assert.ok(html.includes('class="editor-strip"'), 'editor should have its own compact payload strip');
+assert.ok(html.includes('Ctrl/Cmd + Enter to format.'), 'keyboard formatting shortcut should be discoverable');

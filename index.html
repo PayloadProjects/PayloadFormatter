@@ -20,42 +20,53 @@
       })();
     </script>
     <title>JSON/XML Formatter</title>
-    <link rel="stylesheet" href="./style.css?v=compact-20260920-1" />
+    <link rel="stylesheet" href="./style.css?v=identity-20260920-1" />
   </head>
   <body>
     <main class="shell">
       <header class="topbar">
-        <div class="brand-row">
-          <h1>JSON/XML Formatter</h1>
-          <span class="privacy-pill">Local only</span>
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">&lt;/&gt;</span>
+          <div class="brand-copy">
+            <h1>JSON/XML Formatter</h1>
+            <span class="brand-subtitle">Fast formatting. Nothing leaves your browser.</span>
+          </div>
         </div>
 
-        <div class="topbar-controls">
-          <span id="typeBadge" class="type-badge" aria-live="polite">Waiting for payload</span>
-          <button
-            id="themeToggleBtn"
-            class="theme-toggle"
-            type="button"
-            aria-label="Switch to light mode"
-            title="Switch to light mode"
-          >
-            <span id="themeIcon" class="theme-icon" aria-hidden="true">☀</span>
-            <span id="themeLabel">Light mode</span>
-          </button>
-        </div>
+        <button
+          id="themeToggleBtn"
+          class="theme-toggle"
+          type="button"
+          aria-label="Switch to light mode"
+          title="Switch to light mode"
+        >
+          <span id="themeIcon" class="theme-icon" aria-hidden="true">☀</span>
+          <span id="themeLabel">Light mode</span>
+        </button>
       </header>
 
       <section class="workspace" aria-label="JSON/XML formatter">
-        <textarea
-          id="payloadInput"
-          class="editor"
-          spellcheck="false"
-          wrap="off"
-          autocapitalize="off"
-          autocomplete="off"
-          placeholder="Paste JSON or XML here..."
-          aria-label="JSON or XML payload"
-        ></textarea>
+        <div class="editor-frame">
+          <div class="editor-strip">
+            <span class="editor-label">Payload</span>
+            <div class="editor-strip-meta">
+              <span class="privacy-dot" aria-hidden="true"></span>
+              <span class="local-label">Local only</span>
+              <span id="typeBadge" class="type-badge" aria-live="polite">Waiting for payload</span>
+            </div>
+          </div>
+
+          <textarea
+            id="payloadInput"
+            class="editor"
+            spellcheck="false"
+            wrap="off"
+            autocapitalize="off"
+            autocomplete="off"
+            placeholder="Paste JSON or XML here..."
+            aria-label="JSON or XML payload"
+          ></textarea>
+        </div>
 
         <div class="toolbar">
           <div class="actions" role="group" aria-label="Formatting actions">
@@ -67,13 +78,14 @@
 
           <div class="status-area">
             <span id="statusText" role="status" aria-live="polite">Ready.</span>
+            <span class="status-divider" aria-hidden="true"></span>
             <span id="metaText" class="meta-text">0 lines · 0 B</span>
           </div>
         </div>
 
         <div class="workspace-note">
           <span>Draft stays in this tab across refresh.</span>
-          <span>Nothing is uploaded.</span>
+          <span>Ctrl/Cmd + Enter to format.</span>
         </div>
       </section>
     </main>
