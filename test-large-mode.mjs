@@ -26,7 +26,9 @@ assert.ok(html.includes('id="largeNotice"'),
 assert.ok(css.includes('.large-notice') && css.includes('.editor.large-mode'),
   'large mode notice and preview state must be styled');
 assert.ok(!html.includes('id="downloadBtn"'),
-  'large mode must keep the existing compact Clear/Paste/Format/Copy workflow');
+  'large mode must keep the compact workflow without adding Download');
+assert.ok(html.includes('id="pasteFormatBtn"') && !html.includes('id="pasteBtn"') && !html.includes('id="formatBtn"'),
+  'large mode must use the combined Paste & Format action');
 assert.match(html, /app\.js\?v=large-preview-20261002-1/,
   'the deployed page must bypass stale JavaScript after large-mode integration');
 assert.match(html, /style\.css\?v=large-preview-20261002-1/,

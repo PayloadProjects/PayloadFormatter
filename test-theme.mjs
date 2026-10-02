@@ -35,11 +35,12 @@ assert.ok(packageJson.scripts.test.includes('test.mjs'));
 assert.ok(packageJson.scripts.test.includes('test-theme.mjs'));
 
 const clearIndex = html.indexOf('id="clearBtn"');
-const pasteIndex = html.indexOf('id="pasteBtn"');
-const formatIndex = html.indexOf('id="formatBtn"');
+const pasteFormatIndex = html.indexOf('id="pasteFormatBtn"');
 const copyIndex = html.indexOf('id="copyBtn"');
-assert.ok(clearIndex < pasteIndex && pasteIndex < formatIndex && formatIndex < copyIndex,
-  'compact action order must remain Clear → Paste → Format → Copy');
+assert.ok(clearIndex < pasteFormatIndex && pasteFormatIndex < copyIndex,
+  'compact action order must remain Clear → Paste & Format → Copy');
+assert.ok(!html.includes('id="pasteBtn"') && !html.includes('id="formatBtn"'),
+  'separate Paste and Format buttons must not return');
 assert.ok(html.indexOf('id="payloadInput"') < html.indexOf('class="toolbar"'),
   'compact layout must keep the action bar below the editor');
 assert.ok(css.includes('height: 100dvh'), 'app shell should be constrained to the dynamic viewport height');

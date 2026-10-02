@@ -11,9 +11,8 @@ const FORMAT_TIMEOUT_PER_MB_MS = 5_000;
 const MAX_FORMAT_TIMEOUT_MS = 120_000;
 
 const editor = document.querySelector('#payloadInput');
-const formatBtn = document.querySelector('#formatBtn');
+const pasteFormatBtn = document.querySelector('#pasteFormatBtn');
 const copyBtn = document.querySelector('#copyBtn');
-const pasteBtn = document.querySelector('#pasteBtn');
 const clearBtn = document.querySelector('#clearBtn');
 const statusText = document.querySelector('#statusText');
 const typeBadge = document.querySelector('#typeBadge');
@@ -67,9 +66,8 @@ editor.addEventListener('paste', (event) => {
   setStatus('Pasted from clipboard.', 'success');
 });
 
-formatBtn.addEventListener('click', formatPayload);
+pasteFormatBtn.addEventListener('click', pasteAndFormatPayload);
 copyBtn.addEventListener('click', copyPayload);
-pasteBtn.addEventListener('click', pastePayload);
 clearBtn.addEventListener('click', clearPayload);
 themeToggleBtn?.addEventListener('click', () => {
   applyTheme(currentTheme() === 'dark' ? 'light' : 'dark', { persist: true });
@@ -190,17 +188,30 @@ function acceptPastedText(text) {
 
 async function formatPayload() {
   if (busy) return;
+
+  setBusy(true);
+  try {
+    await formatCurrentPayload();
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function formatCurrentPayload() {
   const text = getPayloadText();
-  if (!text) return setStatus('Paste JSON or XML first.', 'error');
+  if (!text) {
+    setStatus('Paste JSON or XML first.', 'error');
+    return;
+  }
 
   const startedRevision = editRevision;
-  setBusy(true);
   setStatus('Formatting…');
+
   try {
     const result = await runWorker(text);
 
     if (editRevision !== startedRevision) {
-      setStatus('Input changed while formatting. Your newer edits were kept; press Format again.', 'warning');
+      setStatus('Input changed while formatting. Your newer edits were kept; format again.', 'warning');
       return;
     }
 
@@ -235,6 +246,31 @@ async function formatPayload() {
     }
   } catch (error) {
     setStatus(error?.message || String(error), 'error');
+  }
+}
+
+async function pasteAndFormatPayload() {
+  if (busy) return;
+
+  setBusy(true);
+  try {
+    if (!navigator.clipboard?.readText) throw new Error('Clipboard read is unavailable.');
+
+    setStatus('Reading clipboard…');
+    const text = await navigator.clipboard.readText();
+    if (!text) {
+      setStatus('Clipboard does not contain text.', 'error');
+      return;
+    }
+
+    acceptPastedText(text);
+    await formatCurrentPayload();
+  } catch (error) {
+    editor.focus();
+    setStatus(
+      'Browser blocked automatic paste. Use Ctrl+V or Cmd+V, then Ctrl+Enter or Cmd+Enter to format.',
+      'warning',
+    );
   } finally {
     setBusy(false);
   }
@@ -290,22 +326,6 @@ async function writeToClipboard(text) {
   editor.select();
   if (!document.execCommand('copy')) throw new Error('Copy is not supported by this browser.');
   editor.setSelectionRange(0, 0);
-}
-
-async function pastePayload() {
-  try {
-    if (!navigator.clipboard?.readText) throw new Error('Clipboard read is unavailable.');
-
-    setStatus('Reading clipboard…');
-    const text = await navigator.clipboard.readText();
-    if (!text) return setStatus('Clipboard does not contain text.', 'error');
-
-    acceptPastedText(text);
-    setStatus('Pasted from clipboard.', 'success');
-  } catch (error) {
-    editor.focus();
-    setStatus('Browser blocked automatic paste. Use Ctrl+V or Cmd+V in the editor.', 'warning');
-  }
 }
 
 function clearPayload() {
@@ -513,9 +533,8 @@ function runWorker(text) {
 function setBusy(value) {
   busy = value;
   document.body.classList.toggle('busy', value);
-  formatBtn.disabled = value;
+  pasteFormatBtn.disabled = value;
   clearBtn.disabled = value;
-  pasteBtn.disabled = value;
   syncActionButtons();
 }
 

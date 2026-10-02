@@ -27,8 +27,8 @@ assert.ok(app.includes('clearTimeout(waiter.timeoutId)'),
   'completed requests must clean up timeout handles');
 assert.ok(app.includes('clearStoredDraft();'),
   'oversized payloads must remove stale persisted drafts');
-assert.ok(app.includes('pasteBtn.disabled = value'),
-  'programmatic paste should be disabled while formatting is active');
+assert.ok(app.includes('pasteFormatBtn.disabled = value'),
+  'Paste & Format should stay disabled while clipboard/format work is active');
 assert.ok(!app.includes("if (!text.trim())"),
   'large format requests must not clone/scan the entire payload on the main thread just to test emptiness');
 assert.match(html, /app\.js\?v=[A-Za-z0-9._-]+/,

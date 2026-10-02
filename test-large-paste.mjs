@@ -17,13 +17,13 @@ assert.match(app, /function refreshUiQuick\(text(?:,\s*forcedMode\s*=\s*null)?\)
 assert.ok(app.includes('chars · large payload'),
   'large-payload metadata should use an O(1) character-count summary');
 assert.ok(app.includes('insertAtSelectionFast(text)'),
-  'paste button should use the fast insertion path');
+  'combined paste-and-format action should keep the fast insertion path');
 assert.ok(!app.includes("editor.dispatchEvent(new Event('input'"),
   'programmatic paste must not trigger a second synchronous input pipeline');
 assert.ok(app.includes("if (!current && start === 0 && end === 0)"),
   'empty-editor paste should assign clipboard text directly without concatenation');
 assert.ok(app.includes("setStatus('Reading clipboard…')"),
-  'paste should immediately acknowledge clipboard work to the user');
+  'Paste & Format should immediately acknowledge clipboard work to the user');
 assert.match(html, /app\.js\?v=[A-Za-z0-9._-]+/,
   'GitHub Pages must load a versioned JavaScript asset instead of a stale cached file');
 
