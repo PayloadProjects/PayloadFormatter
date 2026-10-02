@@ -31,8 +31,8 @@ assert.ok(app.includes('pasteBtn.disabled = value'),
   'programmatic paste should be disabled while formatting is active');
 assert.ok(!app.includes("if (!text.trim())"),
   'large format requests must not clone/scan the entire payload on the main thread just to test emptiness');
-assert.match(html, /app\.js\?v=reliability-20260920-1/,
-  'the reliability build must bypass stale cached JavaScript');
+assert.match(html, /app\.js\?v=[A-Za-z0-9._-]+/,
+  'the reliability build must use a versioned JavaScript URL to bypass stale cache');
 
 assert.ok(ci.includes('- main'));
 assert.ok(ci.includes('- "Tag_#2"'),

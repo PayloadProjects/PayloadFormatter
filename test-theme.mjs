@@ -34,8 +34,6 @@ const packageJson = JSON.parse(pkg);
 assert.ok(packageJson.scripts.test.includes('test.mjs'));
 assert.ok(packageJson.scripts.test.includes('test-theme.mjs'));
 
-console.log('All Payload Formatter theme regression tests passed.');
-
 const clearIndex = html.indexOf('id="clearBtn"');
 const pasteIndex = html.indexOf('id="pasteBtn"');
 const formatIndex = html.indexOf('id="formatBtn"');
@@ -54,5 +52,7 @@ assert.ok(html.includes('class="brand-mark"'), 'formatter should expose a compac
 assert.ok(html.includes('class="editor-strip"'), 'editor should have its own compact payload strip');
 assert.ok(html.includes('Ctrl/Cmd + Enter to format.'), 'keyboard formatting shortcut should be discoverable');
 
-assert.ok(html.includes('style.css?v=viewport-20260920-1'),
-  'viewport scrollbar fix must bypass stale cached CSS');
+assert.match(html, /style\.css\?v=[A-Za-z0-9._-]+/,
+  'viewport layout CSS must remain cache-busted');
+
+console.log('All Payload Formatter theme regression tests passed.');

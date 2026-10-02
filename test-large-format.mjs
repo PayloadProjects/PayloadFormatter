@@ -29,8 +29,6 @@ assert.equal(xml.valid, true);
 assert.match(json.formatted, /"items": \[/);
 assert.match(xml.formatted, /<item id="1">/);
 
-console.log('All large-format optimization regression tests passed.');
-
 const escapedXml = formatXmlBestEffort('<root name=\\\"Example\\\"><id>123</id></root>');
 assert.equal(escapedXml.valid, true);
 assert.match(escapedXml.formatted, /name="Example"/,
@@ -62,3 +60,5 @@ for (const source of [
   assert.match(result.formatted, /Alpha's beta value/,
     'multiple wrapped XML backslash layers must normalize in one formatting pass');
 }
+
+console.log('All large-format optimization regression tests passed.');
