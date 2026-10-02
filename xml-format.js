@@ -261,7 +261,7 @@ function normalizeXmlOpeningTagFast(source, tagStart, tagEnd, nameStart, nameEnd
   }
 
   let tag = source.slice(tagStart, tagEnd + 1);
-  if (hasEscapedQuotes) tag = tag.replace(/\\(["'])/g, '$1');
+  if (hasEscapedQuotes) tag = tag.replace(/\\+(["'])/g, '$1');
   return normalizeXmlOpeningTag(tag, selfClosing);
 }
 

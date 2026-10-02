@@ -51,3 +51,14 @@ assert.equal(doubleWrappedTransportXml.formatted, '<root>\n\t<id>123</id>\n</roo
 
 assert.ok(resilient.includes('startsLikeXmlDocument(normalized)'),
   'XML recovery must not accept quoted text merely because it contains XML markup');
+
+for (const source of [
+  String.raw`<root><message>Alpha\\'s beta value</message></root>`,
+  String.raw`<root><message>Alpha\\\\'s beta value</message></root>`,
+  String.raw`<root><message>Alpha\\\\\\'s beta value</message></root>`,
+]) {
+  const result = formatXmlBestEffort(JSON.stringify(source));
+  assert.equal(result.valid, true);
+  assert.match(result.formatted, /Alpha's beta value/,
+    'multiple wrapped XML backslash layers must normalize in one formatting pass');
+}

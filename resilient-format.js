@@ -167,7 +167,7 @@ export function formatXmlBestEffort(input) {
     // Only encoded/wrapped XML gets source-language escape cleanup.
     // Raw XML backslashes are data and must remain untouched.
     if (wrappedEncoding) {
-      const normalizedInner = cleaned.replace(/\\(['&])/g, '$1');
+      const normalizedInner = cleaned.replace(/\\+(['&])/g, '$1');
       repairedInnerEncoding = normalizedInner !== cleaned;
       cleaned = normalizedInner;
     }

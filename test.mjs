@@ -114,6 +114,19 @@ assert.match(wrappedBackslashXml.formatted, /C:\\\\temp\\\\file\.xml/,
 assert.match(wrappedBackslashXml.formatted, /Alpha's beta value/,
   'wrapped XML transport apostrophe escapes must be normalized');
 
+const wrappedBackslashLayersXml = [
+  String.raw`<root><message>Alpha\\'s beta value</message></root>`,
+  String.raw`<root><message>Alpha\\\\'s beta value</message></root>`,
+  String.raw`<root><message>Alpha\\\\\\'s beta value</message></root>`,
+];
+
+for (const source of wrappedBackslashLayersXml) {
+  const result = formatXmlBestEffort(JSON.stringify(source));
+  assert.equal(result.valid, true);
+  assert.match(result.formatted, /Alpha's beta value/,
+    'wrapped XML must normalize one or more transport backslashes before apostrophes');
+}
+
 const quotedNoiseXml = formatXmlBestEffort('"<root><id>123</id></root>"');
 assert.equal(quotedNoiseXml.valid, true);
 assert.equal(quotedNoiseXml.formatted, '<root>\n\t<id>123</id>\n</root>',
