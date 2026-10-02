@@ -30,3 +30,11 @@ assert.match(json.formatted, /"items": \[/);
 assert.match(xml.formatted, /<item id="1">/);
 
 console.log('All large-format optimization regression tests passed.');
+
+const escapedXml = formatXmlBestEffort('<root name=\\\"Example\\\"><id>123</id></root>');
+assert.equal(escapedXml.valid, true);
+assert.match(escapedXml.formatted, /name="Example"/,
+  'escaped XML attribute quotes must still normalize on the large-payload fast path');
+
+assert.ok(xmlSource.includes('hasEscapedQuotes'),
+  'XML tag-level fast path should detect escaped quotes without a whole-document pre-scan');

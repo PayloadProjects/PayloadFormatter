@@ -202,12 +202,29 @@ function formatAndValidateXmlStreaming(source) {
 function normalizeXmlOpeningTagFast(source, tagStart, tagEnd, nameStart, nameEnd, selfClosing) {
   // Fast return when the tag already has canonical spacing. Most machine-
   // generated XML takes this path, avoiding a second attribute parse.
+  //
+  // Transport/log copies sometimes contain attribute quotes as \". XML does
+  // not use backslash escaping, so normalize that artifact only inside the
+  // affected opening tag instead of scanning/copying the entire document.
   let needsNormalization = false;
+  let hasEscapedQuotes = false;
   let quote = 0;
   let previousWasSpace = false;
 
   for (let i = nameEnd; i < tagEnd; i += 1) {
     const code = source.charCodeAt(i);
+
+    if (code === 92 && i + 1 < tagEnd) {
+      const next = source.charCodeAt(i + 1);
+      if (next === 34 || next === 39) {
+        hasEscapedQuotes = true;
+        needsNormalization = true;
+        i += 1;
+        previousWasSpace = false;
+        continue;
+      }
+    }
+
     if (quote) {
       if (code === quote) quote = 0;
       continue;
@@ -243,7 +260,9 @@ function normalizeXmlOpeningTagFast(source, tagStart, tagEnd, nameStart, nameEnd
     return source.slice(tagStart, tagEnd + 1).trim();
   }
 
-  return normalizeXmlOpeningTag(source.slice(tagStart, tagEnd + 1), selfClosing);
+  let tag = source.slice(tagStart, tagEnd + 1);
+  if (hasEscapedQuotes) tag = tag.replace(/\\(["'])/g, '$1');
+  return normalizeXmlOpeningTag(tag, selfClosing);
 }
 
 function findImmediateClosingTagFast(source, from, name) {
