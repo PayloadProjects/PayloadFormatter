@@ -25,19 +25,21 @@ export function formatAndValidateXml(xml) {
 function formatAndValidateXmlStreaming(source) {
   const chunks = [];
   let buffer = [];
-  const stack = [];
+
+  const flushBuffer = () => {
+    if (!buffer.length) return;
+    chunks.push(buffer.join(''));
+    buffer = [];
+  };
 
   const write = (...parts) => {
     buffer.push(...parts);
-    if (buffer.length >= 4096) {
-      write(buffer.join(''));
-      buffer = [];
-    }
+    if (buffer.length >= 4096) flushBuffer();
   };
 
   const finish = () => {
-    if (buffer.length) write(buffer.join(''));
-    return finish();
+    flushBuffer();
+    return chunks.join('');
   };
 
   const stack = [];
