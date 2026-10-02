@@ -107,9 +107,19 @@ async function formatPayload() {
       return;
     }
 
+    if (result.formatted.length >= LARGE_UI_PAYLOAD_CHARS) {
+      setStatus('Rendering formatted payload…');
+      await nextPaint();
+    }
+
     editor.value = result.formatted;
     editRevision += 1;
-    refreshUi(result.mode, result);
+
+    if (result.formatted.length >= LARGE_UI_PAYLOAD_CHARS || result.largeResult) {
+      refreshUiQuick(result.formatted, result.mode);
+    } else {
+      refreshUi(result.mode, result);
+    }
     saveDraftNow();
 
     if (result.bestEffort) {
@@ -205,8 +215,8 @@ function refreshUiForInput() {
   refreshUi();
 }
 
-function refreshUiQuick(text) {
-  const mode = detectModeFast(text);
+function refreshUiQuick(text, forcedMode = null) {
+  const mode = forcedMode || detectModeFast(text);
   typeBadge.classList.remove('json', 'xml');
 
   if (mode) {
@@ -418,6 +428,16 @@ function utf8ByteLength(text) {
     }
   }
   return bytes;
+}
+
+function nextPaint() {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => resolve());
+    } else {
+      setTimeout(resolve, 0);
+    }
+  });
 }
 
 function formatCharacterCount(chars) {

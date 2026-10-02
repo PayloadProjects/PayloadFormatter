@@ -17,13 +17,29 @@ export function prettyXml(xml) {
 }
 
 export function formatAndValidateXml(xml) {
-  const source = String(xml ?? '').trim();
+  const source = String(xml ?? '');
   if (!source) throw new Error('Invalid XML: no XML elements were found.');
   return formatAndValidateXmlStreaming(source);
 }
 
 function formatAndValidateXmlStreaming(source) {
   const chunks = [];
+  let buffer = [];
+  const stack = [];
+
+  const write = (...parts) => {
+    buffer.push(...parts);
+    if (buffer.length >= 4096) {
+      write(buffer.join(''));
+      buffer = [];
+    }
+  };
+
+  const finish = () => {
+    if (buffer.length) write(buffer.join(''));
+    return finish();
+  };
+
   const stack = [];
   const indentCache = [''];
   let depth = 0;
@@ -41,7 +57,7 @@ function formatAndValidateXmlStreaming(source) {
   };
 
   const structuralBreak = () => {
-    chunks.push('\n', indent());
+    write('\n', indent());
   };
 
   const appendText = (end) => {
@@ -55,7 +71,7 @@ function formatAndValidateXmlStreaming(source) {
       }
     }
     if (!hasNonWhitespace) return;
-    chunks.push(source.slice(textStart, end));
+    write(source.slice(textStart, end));
     lastApplied = 'text';
   };
 
@@ -71,7 +87,7 @@ function formatAndValidateXmlStreaming(source) {
       const close = source.indexOf('-->', lt + 4);
       if (close < 0) throw new Error('Invalid XML: unterminated comment.');
       if (!['text', 'cdata', 'undefined'].includes(lastApplied)) structuralBreak();
-      chunks.push(source.slice(lt, close + 3));
+      write(source.slice(lt, close + 3));
       lastApplied = 'comment';
       index = close + 3;
       textStart = index;
@@ -81,7 +97,7 @@ function formatAndValidateXmlStreaming(source) {
     if (source.startsWith('<![CDATA[', lt)) {
       const close = source.indexOf(']]>', lt + 9);
       if (close < 0) throw new Error('Invalid XML: unterminated CDATA section.');
-      chunks.push(source.slice(lt, close + 3));
+      write(source.slice(lt, close + 3));
       lastApplied = 'cdata';
       index = close + 3;
       textStart = index;
@@ -91,7 +107,7 @@ function formatAndValidateXmlStreaming(source) {
     if (source.startsWith('<?', lt)) {
       const close = source.indexOf('?>', lt + 2);
       if (close < 0) throw new Error('Invalid XML: unterminated processing instruction.');
-      chunks.push(source.slice(lt, close + 2));
+      write(source.slice(lt, close + 2));
       lastApplied = 'instruction';
       index = close + 2;
       textStart = index;
@@ -102,7 +118,7 @@ function formatAndValidateXmlStreaming(source) {
       const close = findXmlTagEnd(source, lt);
       if (close < 0) throw new Error('Invalid XML: unterminated declaration.');
       if (!['text', 'cdata', 'undefined'].includes(lastApplied)) structuralBreak();
-      chunks.push(source.slice(lt, close + 1).trim());
+      write(source.slice(lt, close + 1).trim());
       lastApplied = 'declaration';
       index = close + 1;
       textStart = index;
@@ -132,7 +148,7 @@ function formatAndValidateXmlStreaming(source) {
       }
       depth = Math.max(0, depth - 1);
       if (!['text', 'cdata', 'open-end', 'undefined'].includes(lastApplied)) structuralBreak();
-      chunks.push('</', name, '>');
+      write('</', name, '>');
       lastApplied = 'close-end';
       index = tagEnd + 1;
       textStart = index;
@@ -151,19 +167,19 @@ function formatAndValidateXmlStreaming(source) {
     if (!selfClosing) {
       const immediate = findImmediateClosingTagFast(source, tagEnd + 1, name);
       if (immediate >= 0) {
-        chunks.push(normalized.slice(0, -1), '/>');
+        write(normalized.slice(0, -1), '/>');
         index = immediate;
         textStart = index;
         lastApplied = 'self-end';
         continue;
       }
 
-      chunks.push(normalized);
+      write(normalized);
       stack.push(name);
       depth += 1;
       lastApplied = 'open-end';
     } else {
-      chunks.push(normalized);
+      write(normalized);
       lastApplied = 'self-end';
     }
 

@@ -5,6 +5,8 @@ import {
 } from './input-normalization.js';
 import { normalizeEscapedXml, prettyXml, validateXmlLight, formatAndValidateXml } from './xml-format.js';
 
+const LARGE_RESULT_METRICS_CHARS = 2 * 1024 * 1024;
+
 export function formatJsonBestEffort(input) {
   const started = now();
   const original = String(input ?? '').trim();
@@ -106,8 +108,7 @@ export function formatJsonBestEffort(input) {
     repaired: formatted !== original || recovered.repaired,
     repairNote: `Best-effort formatted JSON. The payload still has a syntax issue: ${issue}`,
     warning: issue,
-    lineCount: countLines(formatted),
-    bytes: byteLength(formatted),
+    ...resultMetrics(formatted),
     elapsedMs: Math.round(now() - started),
   };
 }
@@ -141,51 +142,45 @@ function buildJsonSuccess({
       ? `Normalized pasted JSON: ${unique(allNotes).join('; ')}.`
       : '',
     warning: '',
-    lineCount: countLines(formatted),
-    bytes: byteLength(formatted),
+    ...resultMetrics(formatted),
     elapsedMs: Math.round(now() - started),
   };
 }
 
 export function formatXmlBestEffort(input) {
   const started = now();
-  const original = String(input ?? '').trim();
+  const original = trimOuterXmlWhitespace(String(input ?? ''));
   if (!original) throw new Error('Nothing to format. Paste or upload a payload first.');
 
-  const cleanRawXml = original[0] === '<' && !original.includes('\\\"');
-  const quotedEncoding = cleanRawXml ? false : looksLikeQuotedXmlEncoding(original);
-
-  let cleaned;
+  let cleaned = original;
   let xmlEncodingChanged = false;
-
-  if (cleanRawXml) {
-    // Fast path: ordinary XML should not enter the encoding-recovery search.
-    cleaned = original;
-  } else {
-    const recoveredXml = recoverEncodedXml(original);
-    cleaned = normalizeEscapedXml(recoveredXml.text);
-    xmlEncodingChanged = recoveredXml.changed || cleaned !== original;
-  }
-
   let repairedInnerEncoding = false;
-  if (quotedEncoding) {
-    const normalizedInner = cleaned.replace(/\\(['&])/g, '$1');
-    repairedInnerEncoding = normalizedInner !== cleaned;
-    cleaned = normalizedInner;
-  }
-
   let valid = true;
   let warning = '';
   let formatted = '';
 
   try {
-    // Valid XML is tokenized only once for validation + formatting.
+    // Hot path: raw XML goes directly through the one-pass formatter/validator.
+    // Recovery scans only run if the raw document actually fails.
     formatted = formatAndValidateXml(cleaned);
-  } catch (error) {
-    valid = false;
-    warning = error?.message || 'XML syntax could not be validated.';
-    // Preserve existing best-effort behavior for malformed XML.
-    formatted = prettyXml(cleaned);
+  } catch (firstError) {
+    const recoveredXml = recoverEncodedXml(original);
+    cleaned = normalizeEscapedXml(recoveredXml.text);
+    xmlEncodingChanged = recoveredXml.changed || cleaned !== original;
+
+    if (looksLikeQuotedXmlEncoding(original)) {
+      const normalizedInner = cleaned.replace(/\\(['&])/g, '$1');
+      repairedInnerEncoding = normalizedInner !== cleaned;
+      cleaned = normalizedInner;
+    }
+
+    try {
+      formatted = formatAndValidateXml(cleaned);
+    } catch (error) {
+      valid = false;
+      warning = error?.message || firstError?.message || 'XML syntax could not be validated.';
+      formatted = prettyXml(cleaned);
+    }
   }
 
   const normalizedEncoding = xmlEncodingChanged || repairedInnerEncoding || cleaned !== original;
@@ -200,8 +195,7 @@ export function formatXmlBestEffort(input) {
       ? (normalizedEncoding ? 'Normalized escaped XML input before formatting.' : '')
       : `Best-effort formatted XML. The payload still has a syntax issue: ${warning}`,
     warning,
-    lineCount: countLines(formatted),
-    bytes: byteLength(formatted),
+    ...resultMetrics(formatted),
     elapsedMs: Math.round(now() - started),
   };
 }
@@ -679,6 +673,35 @@ function addAttempt(attempts, text, notes) {
 
 function unique(values) {
   return [...new Set(values)];
+}
+
+function resultMetrics(text) {
+  if (text.length >= LARGE_RESULT_METRICS_CHARS) {
+    return { lineCount: null, bytes: null, largeResult: true };
+  }
+  return {
+    lineCount: countLines(text),
+    bytes: byteLength(text),
+    largeResult: false,
+  };
+}
+
+function trimOuterXmlWhitespace(text) {
+  let start = 0;
+  let end = text.length;
+
+  while (start < end) {
+    const code = text.charCodeAt(start);
+    if (code !== 32 && code !== 9 && code !== 10 && code !== 13) break;
+    start += 1;
+  }
+  while (end > start) {
+    const code = text.charCodeAt(end - 1);
+    if (code !== 32 && code !== 9 && code !== 10 && code !== 13) break;
+    end -= 1;
+  }
+
+  return start === 0 && end === text.length ? text : text.slice(start, end);
 }
 
 function countLines(text) {

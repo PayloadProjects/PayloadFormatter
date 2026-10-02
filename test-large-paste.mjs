@@ -30,3 +30,10 @@ assert.ok(app.includes("if (first === '<') return 'xml'"));
 assert.ok(app.includes("if (first === '{' || first === '[') return 'json'"));
 
 console.log('All large-paste responsiveness regression tests passed.');
+
+assert.ok(app.includes("setStatus('Rendering formatted payload…')"),
+  'large formatted results should yield a browser paint before the editor replacement');
+assert.ok(app.includes('refreshUiQuick(result.formatted, result.mode)'),
+  'large JSON/XML results should avoid exact line/byte rescans on the UI thread');
+assert.ok(app.includes('function nextPaint()'),
+  'large result rendering should yield to the browser');

@@ -30,7 +30,9 @@ function measure(label, payload, fn) {
   return elapsed;
 }
 
-const requested = [Number(process.env.BENCH_MB || 5)];
+const requested = process.env.BENCH_MB
+  ? process.env.BENCH_MB.split(',').map(Number).filter((value) => Number.isFinite(value) && value > 0)
+  : [5, 10, 20];
 
 for (const sizeMb of requested) {
   const target = sizeMb * 1024 * 1024;
