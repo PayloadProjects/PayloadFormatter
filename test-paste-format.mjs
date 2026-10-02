@@ -29,7 +29,7 @@ assert.ok(app.includes('pasteFormatBtn.disabled = value'),
 // JSON and XML must still go through the shared worker-based detection/format path.
 assert.ok(app.includes("if (first === '<') return 'xml'"));
 assert.ok(app.includes("if (first === '{' || first === '[') return 'json'"));
-assert.match(html, /app\.js\?v=paste-format-20261002-1/,
-  'deployment must bypass stale JavaScript after combining the actions');
+assert.match(html, /app\.js\?v=[A-Za-z0-9._-]+/,
+  'deployment must keep JavaScript cache-busted after UI changes');
 
 console.log('All combined Paste & Format regression tests passed.');

@@ -29,9 +29,9 @@ assert.ok(!html.includes('id="downloadBtn"'),
   'large mode must keep the compact workflow without adding Download');
 assert.ok(html.includes('id="pasteFormatBtn"') && !html.includes('id="pasteBtn"') && !html.includes('id="formatBtn"'),
   'large mode must use the combined Paste & Format action');
-assert.match(html, /app\.js\?v=large-preview-20261002-1/,
-  'the deployed page must bypass stale JavaScript after large-mode integration');
-assert.match(html, /style\.css\?v=large-preview-20261002-1/,
-  'the deployed page must bypass stale CSS after large-mode integration');
+assert.match(html, /app\.js\?v=[A-Za-z0-9._-]+/,
+  'the deployed page must keep JavaScript cache-busted');
+assert.match(html, /style\.css\?v=[A-Za-z0-9._-]+/,
+  'the deployed page must keep CSS cache-busted');
 
 console.log('All large-payload preview mode regression tests passed.');

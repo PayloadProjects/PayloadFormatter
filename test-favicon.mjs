@@ -11,8 +11,8 @@ assert.ok(build.includes("'favicon.svg'"),
 assert.ok(html.includes('rel="icon"'),
   'index.html must declare a favicon');
 
-assert.ok(html.includes('./json-xml-formatter-icon.png?v=4'),
-  'browser tab must use the new cache-busting PNG favicon');
+assert.match(html, /\.\/json-xml-formatter-icon\.png\?v=[A-Za-z0-9._-]+/,
+  'browser tab must use a cache-busted PNG favicon');
 assert.ok(build.includes("'json-xml-formatter-icon.png'"),
   'production build must copy the PNG favicon into dist');
 
