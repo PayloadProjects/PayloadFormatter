@@ -152,35 +152,37 @@ export function formatXmlBestEffort(input) {
   const original = trimOuterXmlWhitespace(String(input ?? ''));
   if (!original) throw new Error('Nothing to format. Paste or upload a payload first.');
 
+  const rawXml = startsLikeXmlDocument(original);
+  const wrappedEncoding = !rawXml && looksLikeQuotedXmlEncoding(original);
+
   let cleaned = original;
   let xmlEncodingChanged = false;
   let repairedInnerEncoding = false;
+
+  if (!rawXml) {
+    const recoveredXml = recoverEncodedXml(original);
+    cleaned = normalizeEscapedXml(recoveredXml.text);
+    xmlEncodingChanged = recoveredXml.changed || cleaned !== original;
+
+    // Only encoded/wrapped XML gets source-language escape cleanup.
+    // Raw XML backslashes are data and must remain untouched.
+    if (wrappedEncoding) {
+      const normalizedInner = cleaned.replace(/\\(['&])/g, '$1');
+      repairedInnerEncoding = normalizedInner !== cleaned;
+      cleaned = normalizedInner;
+    }
+  }
+
   let valid = true;
   let warning = '';
   let formatted = '';
 
   try {
-    // Hot path: raw XML goes directly through the one-pass formatter/validator.
-    // Recovery scans only run if the raw document actually fails.
     formatted = formatAndValidateXml(cleaned);
-  } catch (firstError) {
-    const recoveredXml = recoverEncodedXml(original);
-    cleaned = normalizeEscapedXml(recoveredXml.text);
-    xmlEncodingChanged = recoveredXml.changed || cleaned !== original;
-
-    if (looksLikeQuotedXmlEncoding(original)) {
-      const normalizedInner = cleaned.replace(/\\(['&])/g, '$1');
-      repairedInnerEncoding = normalizedInner !== cleaned;
-      cleaned = normalizedInner;
-    }
-
-    try {
-      formatted = formatAndValidateXml(cleaned);
-    } catch (error) {
-      valid = false;
-      warning = error?.message || firstError?.message || 'XML syntax could not be validated.';
-      formatted = prettyXml(cleaned);
-    }
+  } catch (error) {
+    valid = false;
+    warning = error?.message || 'XML syntax could not be validated.';
+    formatted = prettyXml(cleaned);
   }
 
   const normalizedEncoding = xmlEncodingChanged || repairedInnerEncoding || cleaned !== original;
@@ -624,10 +626,12 @@ function recoverEncodedXml(input) {
     seen.add(candidate);
 
     const normalized = normalizeEscapedXml(candidate);
-    try {
-      validateXmlLight(normalized);
-      return { text: candidate, changed: candidate !== original };
-    } catch (_) {}
+    if (startsLikeXmlDocument(normalized)) {
+      try {
+        validateXmlLight(normalized);
+        return { text: candidate, changed: candidate !== original };
+      } catch (_) {}
+    }
 
     try {
       const parsed = JSON.parse(candidate);
@@ -649,6 +653,20 @@ function recoverEncodedXml(input) {
   }
 
   return { text: original, changed: false };
+}
+
+function startsLikeXmlDocument(input) {
+  const text = String(input ?? '');
+  let index = 0;
+
+  if (text.charCodeAt(0) === 0xFEFF) index = 1;
+  while (index < text.length) {
+    const code = text.charCodeAt(index);
+    if (code !== 32 && code !== 9 && code !== 10 && code !== 13) break;
+    index += 1;
+  }
+
+  return text.charCodeAt(index) === 60;
 }
 
 function looksLikeQuotedXmlEncoding(input) {

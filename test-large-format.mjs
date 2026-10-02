@@ -38,3 +38,16 @@ assert.match(escapedXml.formatted, /name="Example"/,
 
 assert.ok(xmlSource.includes('hasEscapedQuotes'),
   'XML tag-level fast path should detect escaped quotes without a whole-document pre-scan');
+
+const wrappedTransportXml = formatXmlBestEffort(JSON.stringify('<root><message>Alpha\\\'s beta value</message></root>'));
+assert.equal(wrappedTransportXml.valid, true);
+assert.match(wrappedTransportXml.formatted, /Alpha's beta value/,
+  'wrapped transport XML recovery must remain correct alongside the large-payload fast path');
+
+const doubleWrappedTransportXml = formatXmlBestEffort(JSON.stringify(JSON.stringify('<root><id>123</id></root>')));
+assert.equal(doubleWrappedTransportXml.valid, true);
+assert.equal(doubleWrappedTransportXml.formatted, '<root>\n\t<id>123</id>\n</root>',
+  'multiple XML transport wrappers must fully unwrap before formatting');
+
+assert.ok(resilient.includes('startsLikeXmlDocument(normalized)'),
+  'XML recovery must not accept quoted text merely because it contains XML markup');

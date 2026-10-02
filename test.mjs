@@ -100,6 +100,25 @@ assert.equal(wrappedXml.valid, true);
 assert.match(wrappedXml.formatted, /Alpha's beta value/);
 assert.match(wrappedXml.formatted, /<message>/);
 
+const rawBackslashXml = formatXmlBestEffort(String.raw`<root><path>C:\\temp\\file.xml</path><text>Alpha\\'s raw value</text></root>`);
+assert.equal(rawBackslashXml.valid, true);
+assert.match(rawBackslashXml.formatted, /C:\\\\temp\\\\file\.xml/,
+  'literal backslashes in ordinary raw XML must be preserved');
+assert.match(rawBackslashXml.formatted, /Alpha\\\\'s raw value/,
+  'raw XML apostrophe backslashes must not be mistaken for transport encoding');
+
+const wrappedBackslashXml = formatXmlBestEffort(JSON.stringify(String.raw`<root><path>C:\\temp\\file.xml</path><message>Alpha\\'s beta value</message></root>`));
+assert.equal(wrappedBackslashXml.valid, true);
+assert.match(wrappedBackslashXml.formatted, /C:\\\\temp\\\\file\.xml/,
+  'wrapped XML must preserve ordinary literal backslashes');
+assert.match(wrappedBackslashXml.formatted, /Alpha's beta value/,
+  'wrapped XML transport apostrophe escapes must be normalized');
+
+const quotedNoiseXml = formatXmlBestEffort('"<root><id>123</id></root>"');
+assert.equal(quotedNoiseXml.valid, true);
+assert.equal(quotedNoiseXml.formatted, '<root>\n\t<id>123</id>\n</root>',
+  'outer quote wrappers must not survive XML formatting');
+
 const brokenXml = formatXmlBestEffort('<root><node><id>123</id></root>');
 assert.equal(brokenXml.valid, false);
 assert.equal(brokenXml.bestEffort, true);
