@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "test": "node test.mjs && node test-theme.mjs && node test-large-paste.mjs && node test-reliability.mjs && node test-favicon.mjs && node test-large-format.mjs",
+    "test": "node test.mjs && node test-theme.mjs && node test-large-paste.mjs && node test-reliability.mjs && node test-favicon.mjs && node test-large-format.mjs && node test-large-mode.mjs",
     "build": "node build.mjs",
     "benchmark": "node benchmark.mjs",
     "benchmark:large": "BENCH_MB=10,20 node benchmark.mjs"

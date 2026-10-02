@@ -603,3 +603,22 @@ button.danger:hover:not(:disabled) {
     gap: 2px;
   }
 }
+
+
+/* Large payloads keep the full text in memory and render only a bounded preview. */
+.large-notice {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--panel-border);
+  background: color-mix(in srgb, var(--warning) 10%, var(--strip-bg));
+  color: var(--warning);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.large-notice[hidden] {
+  display: none;
+}
+
+.editor.large-mode {
+  cursor: default;
+}

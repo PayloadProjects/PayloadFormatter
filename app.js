@@ -4,6 +4,8 @@ const STORAGE_KEY = 'payload-formatter:draft:v1';
 const THEME_STORAGE_KEY = 'payload-formatter:theme:v1';
 const MAX_DRAFT_BYTES = 2 * 1024 * 1024;
 const LARGE_UI_PAYLOAD_CHARS = 512 * 1024;
+const LARGE_PAYLOAD_CHARS = 2 * 1024 * 1024;
+const PREVIEW_CHARS = 120_000;
 const BASE_FORMAT_TIMEOUT_MS = 30_000;
 const FORMAT_TIMEOUT_PER_MB_MS = 5_000;
 const MAX_FORMAT_TIMEOUT_MS = 120_000;
@@ -16,16 +18,20 @@ const clearBtn = document.querySelector('#clearBtn');
 const statusText = document.querySelector('#statusText');
 const typeBadge = document.querySelector('#typeBadge');
 const metaText = document.querySelector('#metaText');
+const largeNotice = document.querySelector('#largeNotice');
 const themeToggleBtn = document.querySelector('#themeToggleBtn');
 const themeIcon = document.querySelector('#themeIcon');
 const themeLabel = document.querySelector('#themeLabel');
 const root = document.documentElement;
 
 let busy = false;
+let copying = false;
 let requestId = 0;
 let editRevision = 0;
 let persistTimer = 0;
 let worker = null;
+let largeText = null;
+let largeFormatted = false;
 const pending = new Map();
 
 initializeTheme();
@@ -42,6 +48,23 @@ editor.addEventListener('keydown', (event) => {
     event.preventDefault();
     formatPayload();
   }
+});
+
+editor.addEventListener('paste', (event) => {
+  const text = event.clipboardData?.getData('text/plain') ?? '';
+  if (!text) return;
+
+  const currentLength = inLargeMode() ? 0 : editor.value.length;
+  const selectedLength = inLargeMode()
+    ? 0
+    : Math.max(0, (editor.selectionEnd ?? currentLength) - (editor.selectionStart ?? currentLength));
+  const nextLength = currentLength - selectedLength + text.length;
+
+  if (!inLargeMode() && nextLength < LARGE_PAYLOAD_CHARS) return;
+
+  event.preventDefault();
+  acceptPastedText(text);
+  setStatus('Pasted from clipboard.', 'success');
 });
 
 formatBtn.addEventListener('click', formatPayload);
@@ -91,9 +114,83 @@ function updateThemeControl(theme) {
   themeToggleBtn.title = `Switch to ${next} mode`;
 }
 
+
+function inLargeMode() {
+  return largeText !== null;
+}
+
+function getPayloadText() {
+  return largeText !== null ? largeText : editor.value;
+}
+
+function buildPreview(text) {
+  if (text.length <= PREVIEW_CHARS) return text;
+
+  let cut = text.lastIndexOf('\n', PREVIEW_CHARS);
+  if (cut < PREVIEW_CHARS / 2) cut = PREVIEW_CHARS;
+
+  const hidden = formatCharacterCount(text.length - cut);
+  return `${text.slice(0, cut)}\n… preview ends here · ${hidden} more chars not shown`;
+}
+
+function enterLargeMode(text, { formatted = false } = {}) {
+  largeText = text;
+  largeFormatted = formatted;
+  editor.value = buildPreview(text);
+  editor.readOnly = true;
+  editor.classList.add('large-mode');
+  editor.scrollTop = 0;
+  editor.scrollLeft = 0;
+  clearStoredDraft();
+
+  if (largeNotice) {
+    const size = `${formatCharacterCount(text.length)} chars`;
+    largeNotice.textContent = formatted
+      ? `Large formatted payload (${size}) · read-only preview. Copy uses the full formatted output.`
+      : `Large payload (${size}) · read-only preview. Format and Copy use the full payload.`;
+    largeNotice.hidden = false;
+  }
+}
+
+function exitLargeMode() {
+  largeText = null;
+  largeFormatted = false;
+  editor.readOnly = false;
+  editor.classList.remove('large-mode');
+  if (largeNotice) largeNotice.hidden = true;
+}
+
+function acceptPastedText(text) {
+  if (inLargeMode()) {
+    exitLargeMode();
+    editor.value = '';
+  }
+
+  const current = editor.value;
+  const start = editor.selectionStart ?? current.length;
+  const end = editor.selectionEnd ?? current.length;
+  const nextLength = current.length - Math.max(0, end - start) + text.length;
+
+  if (nextLength >= LARGE_PAYLOAD_CHARS) {
+    const combined = !current && start === 0 && end === 0
+      ? text
+      : current.slice(0, start) + text + current.slice(end);
+
+    editRevision += 1;
+    enterLargeMode(combined);
+    refreshUiQuick(combined);
+    return;
+  }
+
+  insertAtSelectionFast(text);
+  editRevision += 1;
+  refreshUiForInput();
+  scheduleDraftSave();
+}
+
 async function formatPayload() {
   if (busy) return;
-  const text = editor.value;
+  const text = getPayloadText();
   if (!text) return setStatus('Paste JSON or XML first.', 'error');
 
   const startedRevision = editRevision;
@@ -112,13 +209,20 @@ async function formatPayload() {
       await nextPaint();
     }
 
-    editor.value = result.formatted;
-    editRevision += 1;
-
-    if (result.formatted.length >= LARGE_UI_PAYLOAD_CHARS || result.largeResult) {
+    if (result.formatted.length >= LARGE_PAYLOAD_CHARS) {
+      editRevision += 1;
+      enterLargeMode(result.formatted, { formatted: true });
       refreshUiQuick(result.formatted, result.mode);
     } else {
-      refreshUi(result.mode, result);
+      if (inLargeMode()) exitLargeMode();
+      editor.value = result.formatted;
+      editRevision += 1;
+
+      if (result.formatted.length >= LARGE_UI_PAYLOAD_CHARS || result.largeResult) {
+        refreshUiQuick(result.formatted, result.mode);
+      } else {
+        refreshUi(result.mode, result);
+      }
     }
     saveDraftNow();
 
@@ -137,22 +241,55 @@ async function formatPayload() {
 }
 
 async function copyPayload() {
-  const text = editor.value;
+  if (copying) return;
+
+  const text = getPayloadText();
   if (!text) return setStatus('Nothing to copy.', 'error');
 
+  copying = true;
+  syncActionButtons();
+  if (text.length >= LARGE_UI_PAYLOAD_CHARS) setStatus('Copying large payload…');
+
   try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-    } else {
-      editor.focus();
-      editor.select();
-      if (!document.execCommand('copy')) throw new Error('Copy is not supported by this browser.');
-      editor.setSelectionRange(0, 0);
-    }
+    await writeToClipboard(text);
     setStatus('Copied to clipboard.', 'success');
   } catch (error) {
-    setStatus('Browser blocked clipboard access. Select the text and use Ctrl+C or Cmd+C.', 'error');
+    setStatus(
+      inLargeMode()
+        ? 'Browser blocked copying the full large payload. Allow clipboard access and try Copy again.'
+        : 'Browser blocked clipboard access. Select the text and use Ctrl+C or Cmd+C.',
+      'error',
+    );
+  } finally {
+    copying = false;
+    syncActionButtons();
   }
+}
+
+async function writeToClipboard(text) {
+  const clipboard = navigator.clipboard;
+
+  if (clipboard?.write && typeof ClipboardItem === 'function') {
+    try {
+      const blob = new Blob([text], { type: 'text/plain' });
+      await clipboard.write([new ClipboardItem({ 'text/plain': blob })]);
+      return;
+    } catch (_) {}
+  }
+
+  if (clipboard?.writeText) {
+    await clipboard.writeText(text);
+    return;
+  }
+
+  if (inLargeMode()) {
+    throw new Error('Clipboard API is required for large payloads.');
+  }
+
+  editor.focus();
+  editor.select();
+  if (!document.execCommand('copy')) throw new Error('Copy is not supported by this browser.');
+  editor.setSelectionRange(0, 0);
 }
 
 async function pastePayload() {
@@ -163,13 +300,7 @@ async function pastePayload() {
     const text = await navigator.clipboard.readText();
     if (!text) return setStatus('Clipboard does not contain text.', 'error');
 
-    insertAtSelectionFast(text);
-    editRevision += 1;
-
-    // Keep the paste interaction responsive. Large payloads should become
-    // visible before we do any work that scales with the full document size.
-    refreshUiForInput();
-    scheduleDraftSave();
+    acceptPastedText(text);
     setStatus('Pasted from clipboard.', 'success');
   } catch (error) {
     editor.focus();
@@ -178,7 +309,8 @@ async function pastePayload() {
 }
 
 function clearPayload() {
-  if (!editor.value) return setStatus('Editor is already empty.');
+  if (!editor.value && !inLargeMode()) return setStatus('Editor is already empty.');
+  exitLargeMode();
   editor.value = '';
   editRevision += 1;
   clearStoredDraft();
@@ -255,6 +387,11 @@ function scheduleDraftSave() {
 
 function saveDraftNow() {
   clearTimeout(persistTimer);
+  if (inLargeMode()) {
+    clearStoredDraft();
+    return;
+  }
+
   const text = editor.value;
   if (!text) {
     clearStoredDraft();
@@ -379,6 +516,11 @@ function setBusy(value) {
   formatBtn.disabled = value;
   clearBtn.disabled = value;
   pasteBtn.disabled = value;
+  syncActionButtons();
+}
+
+function syncActionButtons() {
+  copyBtn.disabled = busy || copying;
 }
 
 function setStatus(message, tone = '') {

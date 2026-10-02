@@ -8,6 +8,8 @@ const [app, html] = await Promise.all([
 
 assert.ok(app.includes('const LARGE_UI_PAYLOAD_CHARS = 512 * 1024'),
   'large payloads need a dedicated lightweight UI path');
+assert.ok(app.includes('const LARGE_PAYLOAD_CHARS = 2 * 1024 * 1024'),
+  'very large payloads need a preview-only editor threshold');
 assert.ok(app.includes('refreshUiForInput()'),
   'paste and manual input should share the optimized refresh path');
 assert.match(app, /function refreshUiQuick\(text(?:,\s*forcedMode\s*=\s*null)?\)/,
