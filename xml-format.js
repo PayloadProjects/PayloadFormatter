@@ -196,7 +196,7 @@ function formatAndValidateXmlStreaming(source) {
     throw new Error(`Invalid XML: missing closing tag for <${stack[stack.length - 1]}>.`);
   }
 
-  return chunks.join('');
+  return finish();
 }
 
 function normalizeXmlOpeningTagFast(source, tagStart, tagEnd, nameStart, nameEnd, selfClosing) {
