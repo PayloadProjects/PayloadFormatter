@@ -33,12 +33,23 @@
   --success: #8fd9ab;
   --warning: #e8c56f;
 
-  --editor-bg: #151b22;
-  --editor-text: #e6edf3;
+  --editor-bg: #0b0f14;
+  --editor-text: #dbe2ea;
   --editor-placeholder: #8795a5;
   --editor-focus: #42a6c3;
   --editor-caret: #dff7ff;
   --editor-selection: rgba(66, 166, 195, .24);
+
+  /* Low-glare reading surface with distinct, high-contrast syntax colors. */
+  --syntax-key: #a9c9ec;
+  --syntax-string: #acd4b3;
+  --syntax-number: #d8c397;
+  --syntax-boolean: #cbbfe5;
+  --syntax-attribute: #d5c49f;
+  --syntax-muted: #a2adbc;
+  --tree-hover-bg: #121c28;
+  --tree-focus-bg: #152536;
+  --tree-hit-bg: #2a2519;
 
   --brand-mark-bg: #163240;
   --brand-mark-border: #28586b;
@@ -106,6 +117,17 @@
   --editor-caret: #17313d;
   --editor-selection: rgba(36, 148, 178, .16);
 
+  /* Preserve the existing light-theme palette and interaction highlights. */
+  --syntax-key: var(--json-text);
+  --syntax-string: var(--success);
+  --syntax-number: var(--warning);
+  --syntax-boolean: var(--xml-text);
+  --syntax-attribute: var(--xml-text);
+  --syntax-muted: var(--muted);
+  --tree-hover-bg: color-mix(in srgb, var(--editor-focus) 8%, transparent);
+  --tree-focus-bg: color-mix(in srgb, var(--editor-focus) 12%, transparent);
+  --tree-hit-bg: color-mix(in srgb, var(--warning) 22%, transparent);
+
   --brand-mark-bg: #e7f5f9;
   --brand-mark-border: #b8dde7;
   --brand-mark-text: #157792;
@@ -155,7 +177,7 @@ h1 { margin: 0; color: var(--heading); font-size: 17px; line-height: 1.25; font-
 .type-badge { padding: 3px 8px; border: 1px solid var(--badge-border); border-radius: 6px; background: var(--badge-bg); color: var(--badge-text); font-size: 11px; font-weight: 600; line-height: 1.3; white-space: nowrap; }
 .type-badge.json { border-color: var(--json-border); background: var(--json-bg); color: var(--json-text); }
 .type-badge.xml { border-color: var(--xml-border); background: var(--xml-bg); color: var(--xml-text); }
-.editor-body { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
+.editor-body { background: var(--editor-bg); position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
 .editor { display: block; flex: 1; min-height: 0; width: 100%; height: auto; resize: none; border: 0; outline: none; background: var(--editor-bg); color: var(--editor-text); font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-size: 14px; line-height: 1.6; tab-size: 2; padding: 16px; white-space: pre; overflow: auto; caret-color: var(--editor-caret); scrollbar-color: var(--scroll-thumb) var(--scroll-track); }
 .editor::selection { background: var(--editor-selection); }
 .editor:focus-visible { box-shadow: inset 0 0 0 1px var(--editor-focus); }

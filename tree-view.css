@@ -109,6 +109,7 @@
 }
 
 .tree-view {
+  background: var(--editor-bg);
   min-height: 0;
   flex: 1;
   overflow: auto;
@@ -164,17 +165,17 @@
 }
 
 .tree-row:hover {
-  background: color-mix(in srgb, var(--editor-focus) 8%, transparent);
+  background: var(--tree-hover-bg);
 }
 
 .tree-row:focus-visible {
   outline: 1px solid var(--editor-focus);
   outline-offset: -1px;
-  background: color-mix(in srgb, var(--editor-focus) 12%, transparent);
+  background: var(--tree-focus-bg);
 }
 
 .tree-hit > .tree-row {
-  background: color-mix(in srgb, var(--warning) 22%, transparent);
+  background: var(--tree-hit-bg);
   box-shadow: inset 3px 0 0 var(--warning);
 }
 
@@ -192,18 +193,18 @@
 }
 
 .tree-key,
-.tree-tag { color: var(--json-text); }
-.tree-index { color: var(--muted); }
+.tree-tag { color: var(--syntax-key); }
+.tree-index { color: var(--syntax-muted); }
 .tree-string,
-.tree-attrval { color: var(--success); }
-.tree-number { color: var(--warning); }
-.tree-bool { color: var(--xml-text); font-weight: 700; }
-.tree-null { color: var(--muted); font-style: italic; }
-.tree-attr { color: var(--xml-text); }
+.tree-attrval { color: var(--syntax-string); }
+.tree-number { color: var(--syntax-number); }
+.tree-bool { color: var(--syntax-boolean); font-weight: 700; }
+.tree-null { color: var(--syntax-muted); font-style: italic; }
+.tree-attr { color: var(--syntax-attribute); }
 .tree-text { color: var(--editor-text); }
-.tree-comment { color: var(--muted); font-style: italic; }
+.tree-comment { color: var(--syntax-muted); font-style: italic; }
 .tree-punct,
-.tree-count { color: var(--muted); }
+.tree-count { color: var(--syntax-muted); }
 
 .tree-long {
   cursor: pointer;
