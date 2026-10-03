@@ -1,5 +1,6 @@
 import { detectPayloadMode } from './payload-detection.js';
 import { createTreeController } from './tree-controller.js';
+import { createSyntaxEditor } from './text-editor.js';
 
 const STORAGE_KEY = 'payload-formatter:draft:v1';
 const THEME_STORAGE_KEY = 'payload-formatter:theme:v1';
@@ -29,10 +30,12 @@ let copying = false;
 let requestId = 0;
 let editRevision = 0;
 let persistTimer = 0;
+let inputUiFrame = 0;
 let worker = null;
 let largeText = null;
 let largeFormatted = false;
 const pending = new Map();
+const syntaxEditor = createSyntaxEditor(editor);
 
 const treeController = createTreeController({
   getText: getPayloadText,
@@ -50,8 +53,15 @@ treeController.refresh();
 
 editor.addEventListener('input', () => {
   editRevision += 1;
-  refreshUiForInput();
-  scheduleDraftSave();
+  // Native multi-line insertions can emit many input events in a single task.
+  // Keep revision protection immediate; coalesce metadata/highlighting work.
+  if (!inputUiFrame) {
+    inputUiFrame = requestAnimationFrame(() => {
+      inputUiFrame = 0;
+      refreshUiForInput();
+      scheduleDraftSave();
+    });
+  }
 });
 editor.addEventListener('keydown', (event) => {
   if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
@@ -229,6 +239,10 @@ async function formatCurrentPayload() {
     if (result.formatted.length >= LARGE_UI_PAYLOAD_CHARS) {
       setStatus('Rendering formatted payload…');
       await nextPaint();
+    }
+    if (editRevision !== startedRevision) {
+      setStatus('Input changed while formatting. Your newer edits were kept; format again.', 'warning');
+      return;
     }
 
     if (result.formatted.length >= LARGE_PAYLOAD_CHARS) {
@@ -416,6 +430,7 @@ function refreshUiQuick(text, forcedMode = null) {
   // large paste can paint immediately. Exact metrics are available after
   // formatting, when the worker already returns them.
   metaText.textContent = `${formatCharacterCount(text.length)} chars · large payload`;
+  syntaxEditor.refresh(mode);
 }
 
 function refreshUi(forcedMode = null, metrics = null) {
@@ -432,6 +447,7 @@ function refreshUi(forcedMode = null, metrics = null) {
   const lines = Number.isFinite(metrics?.lineCount) ? metrics.lineCount : countLinesFast(text);
   const bytes = Number.isFinite(metrics?.bytes) ? metrics.bytes : utf8ByteLength(text);
   metaText.textContent = `${lines.toLocaleString()} ${lines === 1 ? 'line' : 'lines'} · ${formatBytes(bytes)}`;
+  syntaxEditor.refresh(mode);
 }
 
 function scheduleDraftSave() {

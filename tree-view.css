@@ -174,9 +174,13 @@
   background: var(--tree-focus-bg);
 }
 
+.tree-match > .tree-row { background: var(--tree-match-bg); }
+
 .tree-hit > .tree-row {
   background: var(--tree-hit-bg);
-  box-shadow: inset 3px 0 0 var(--warning);
+  box-shadow: inset 3px 0 0 var(--tree-hit-border);
+  outline: 1px solid var(--tree-hit-border);
+  outline-offset: -1px;
 }
 
 .tree-toggle {
@@ -199,9 +203,9 @@
 .tree-attrval { color: var(--syntax-string); }
 .tree-number { color: var(--syntax-number); }
 .tree-bool { color: var(--syntax-boolean); font-weight: 700; }
-.tree-null { color: var(--syntax-muted); font-style: italic; }
+.tree-null { color: var(--syntax-boolean); }
 .tree-attr { color: var(--syntax-attribute); }
-.tree-text { color: var(--editor-text); }
+.tree-text { color: var(--syntax-string); }
 .tree-comment { color: var(--syntax-muted); font-style: italic; }
 .tree-punct,
 .tree-count { color: var(--syntax-muted); }

@@ -277,6 +277,7 @@ export function createTreeView(container, { onCopyPath } = {}) {
   let matches = [];
   let current = -1;
   let hitLi = null;
+  let matchPaths = new Set();
 
   container.addEventListener('click', onClick);
   container.addEventListener('keydown', onKeydown);
@@ -290,6 +291,7 @@ export function createTreeView(container, { onCopyPath } = {}) {
     matches = [];
     current = -1;
     hitLi = null;
+    matchPaths.clear();
   }
 
   function showMessage(title, detail, tone = '') {
@@ -308,9 +310,11 @@ export function createTreeView(container, { onCopyPath } = {}) {
     container.appendChild(box);
   }
 
-  function renderNode(node, depth, open) {
+  function renderNode(node, depth, open, searchPath = '') {
     const li = document.createElement('li');
     li.className = 'tree-node';
+    li._searchPath = searchPath;
+    if (matchPaths.has(searchPath)) li.classList.add('tree-match');
     li.setAttribute('role', 'treeitem');
     li.setAttribute('aria-level', String(depth + 1));
     li._node = node;
@@ -363,7 +367,8 @@ export function createTreeView(container, { onCopyPath } = {}) {
     const openKids = li._depth === 0 && node.count <= AUTO_OPEN_MAX_CHILDREN;
     const fragment = document.createDocumentFragment();
     for (let index = li._rendered; index < end; index += 1) {
-      fragment.appendChild(renderNode(childAt(node, index), li._depth + 1, openKids));
+      fragment.appendChild(renderNode(childAt(node, index), li._depth + 1, openKids,
+        li._searchPath ? `${li._searchPath}/${index}` : String(index)));
     }
     group.appendChild(fragment);
     li._rendered = end;
@@ -482,7 +487,10 @@ export function createTreeView(container, { onCopyPath } = {}) {
   }
 
   function clearHit() {
-    if (hitLi) hitLi.classList.remove('tree-hit');
+    if (hitLi) {
+      hitLi.classList.remove('tree-hit');
+      hitLi.removeAttribute('aria-current');
+    }
     hitLi = null;
   }
 
@@ -496,6 +504,7 @@ export function createTreeView(container, { onCopyPath } = {}) {
     clearHit();
     hitLi = li;
     li.classList.add('tree-hit');
+    li.setAttribute('aria-current', 'true');
     li.firstElementChild.scrollIntoView({ block: 'center' });
   }
 
@@ -573,6 +582,8 @@ export function createTreeView(container, { onCopyPath } = {}) {
       matches = [];
       current = -1;
       lastTruncated = false;
+      matchPaths.clear();
+      for (const li of container.querySelectorAll('.tree-match')) li.classList.remove('tree-match');
       const needle = String(query || '').trim().toLowerCase();
       if (!needle || !root) return summary();
 
@@ -595,6 +606,11 @@ export function createTreeView(container, { onCopyPath } = {}) {
         if (child.container) stack.push({ node: child, next: 0, path });
       }
       lastTruncated = stack.length > 0;
+      matchPaths = new Set(matches.map(path => path.join('/')));
+      // Only paint existing rows; never expand/materialize the tree to mark hits.
+      for (const li of container.querySelectorAll('.tree-node')) {
+        li.classList.toggle('tree-match', matchPaths.has(li._searchPath));
+      }
       return matches.length ? go(0) : summary(lastTruncated);
     },
 

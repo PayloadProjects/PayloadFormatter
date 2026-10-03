@@ -1,0 +1,44 @@
+/* Native editing + bounded syntax mirror: same metrics, no duplicate accessible text. */
+.text-editor {
+  --gutter-width: 4ch;
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--editor-bg);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 14px;
+  line-height: 24px;
+}
+.text-editor .editor, .syntax-mirror, .syntax-gutter {
+  font: inherit;
+  font-weight: 400;
+  letter-spacing: 0;
+  font-variant-ligatures: none;
+  tab-size: 2;
+  direction: ltr;
+  unicode-bidi: plaintext;
+}
+.text-editor .editor { position: relative; z-index: 1; margin-left: var(--gutter-width); width: calc(100% - var(--gutter-width)); padding-left: 12px; }
+.syntax-viewport { position: absolute; inset: 0 auto auto 0; overflow: hidden; pointer-events: none; visibility: hidden; }
+.syntax-mirror { position: absolute; top: 0; left: 0; margin: 0; padding: 16px 16px 16px calc(var(--gutter-width) + 12px); white-space: pre; color: var(--editor-text); }
+.syntax-gutter { position: absolute; top: 0; left: 0; width: var(--gutter-width); padding: 16px 8px 16px 0; color: var(--syntax-muted); background: var(--editor-bg); text-align: right; border-right: 1px solid var(--guide); }
+.syntax-gutter .current-line { color: var(--editor-text); }
+.syntax-active-line { position: absolute; left: 0; right: 0; background: var(--tree-hover-bg); }
+.has-syntax .syntax-viewport { visibility: visible; }
+.has-syntax .editor { color: transparent; background: transparent; caret-color: var(--editor-caret); }
+.has-syntax .editor::selection { color: var(--editor-text); background: var(--code-selection-bg); }
+.syntax-key, .syntax-tag { color: var(--syntax-key); }
+.syntax-string { color: var(--syntax-string); }
+.syntax-number { color: var(--syntax-number); }
+.syntax-boolean, .syntax-entity { color: var(--syntax-boolean); }
+.syntax-attribute { color: var(--syntax-attribute); }
+.syntax-muted, .syntax-comment { color: var(--syntax-muted); }
+.editor-frame[data-view="tree"] .text-editor { display: none; }
+.text-editor .empty-state { font-family: ui-sans-serif, system-ui, sans-serif; z-index: 2; }
+@media (forced-colors: active) {
+  .syntax-viewport { display: none; }
+  .has-syntax .editor { color: CanvasText; background: Canvas; caret-color: CanvasText; }
+}

@@ -23,8 +23,9 @@
       })();
     </script>
     <title>JSON/XML Formatter</title>
-    <link rel="stylesheet" href="./style.css?v=panel-contrast-v1" />
-    <link rel="stylesheet" href="./tree-view.css?v=panel-contrast-v1" />
+    <link rel="stylesheet" href="./style.css?v=readability-v1" />
+    <link rel="stylesheet" href="./tree-view.css?v=readability-v1" />
+    <link rel="stylesheet" href="./text-editor.css?v=readability-v1" />
   </head>
   <body>
     <main class="shell">
@@ -70,6 +71,12 @@
           <div class="editor-body">
           <div id="largeNotice" class="large-notice" role="status" hidden></div>
 
+          <div id="textEditor" class="text-editor">
+            <div id="syntaxViewport" class="syntax-viewport" aria-hidden="true" inert>
+              <div id="syntaxActiveLine" class="syntax-active-line" hidden></div>
+              <pre id="syntaxMirror" class="syntax-mirror"></pre>
+              <div id="syntaxGutter" class="syntax-gutter"></div>
+            </div>
           <textarea
             id="payloadInput"
             class="editor"
@@ -88,6 +95,8 @@
             <small>Ctrl/Cmd + Enter formats the current payload.</small>
           </div>
           <span id="editorHelp" class="sr-only">Paste JSON or XML here. Ctrl/Cmd + Enter to format.</span>
+
+          </div>
 
           <div id="treePanel" class="tree-panel">
             <div class="tree-tools">
@@ -133,7 +142,7 @@
       </section>
     </main>
 
-    <script type="module" src="./app.js?v=tree-view-20261002-1"></script>
+    <script type="module" src="./app.js?v=readability-v1"></script>
     <script type="module" src="./ui-controls.js?v=tree-actions-visible-v1"></script>
   </body>
 </html>

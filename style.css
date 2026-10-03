@@ -40,16 +40,19 @@
   --editor-caret: #dff7ff;
   --editor-selection: rgba(66, 166, 195, .24);
 
-  /* Low-glare reading surface with distinct, high-contrast syntax colors. */
-  --syntax-key: #a9c9ec;
-  --syntax-string: #acd4b3;
-  --syntax-number: #d8c397;
-  --syntax-boolean: #cbbfe5;
-  --syntax-attribute: #d5c49f;
-  --syntax-muted: #a2adbc;
+  /* Consistent type colors in Text and Tree, checked on each reading state. */
+  --syntax-key: #9cdcfe;
+  --syntax-string: #dba38a;
+  --syntax-number: #b5cea8;
+  --syntax-boolean: #82b8f0;
+  --syntax-attribute: #cbb4ed;
+  --syntax-muted: #9ba7b6;
   --tree-hover-bg: #121c28;
   --tree-focus-bg: #152536;
-  --tree-hit-bg: #2a2519;
+  --tree-match-bg: #1c2029;
+  --tree-hit-bg: #302616;
+  --tree-hit-border: #d7ad55;
+  --code-selection-bg: #213346;
 
   --brand-mark-bg: #163240;
   --brand-mark-border: #28586b;
@@ -117,16 +120,19 @@
   --editor-caret: #17313d;
   --editor-selection: rgba(36, 148, 178, .16);
 
-  /* Preserve the existing light-theme palette and interaction highlights. */
-  --syntax-key: var(--json-text);
-  --syntax-string: var(--success);
-  --syntax-number: var(--warning);
-  --syntax-boolean: var(--xml-text);
-  --syntax-attribute: var(--xml-text);
-  --syntax-muted: var(--muted);
-  --tree-hover-bg: color-mix(in srgb, var(--editor-focus) 8%, transparent);
-  --tree-focus-bg: color-mix(in srgb, var(--editor-focus) 12%, transparent);
-  --tree-hit-bg: color-mix(in srgb, var(--warning) 22%, transparent);
+  /* Light mode uses darker inks, not the dark palette on a white surface. */
+  --syntax-key: #174f9b;
+  --syntax-string: #8b381f;
+  --syntax-number: #286428;
+  --syntax-boolean: #6942a4;
+  --syntax-attribute: #72449b;
+  --syntax-muted: #596573;
+  --tree-hover-bg: #f2f5f8;
+  --tree-focus-bg: #e8eef5;
+  --tree-match-bg: #f6f3e7;
+  --tree-hit-bg: #fff0c2;
+  --tree-hit-border: #97701b;
+  --code-selection-bg: #dceafb;
 
   --brand-mark-bg: #e7f5f9;
   --brand-mark-border: #b8dde7;
