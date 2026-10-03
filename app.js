@@ -1,4 +1,5 @@
 import { detectPayloadMode } from './payload-detection.js';
+import { createTreeController } from './tree-controller.js';
 
 const STORAGE_KEY = 'payload-formatter:draft:v1';
 const THEME_STORAGE_KEY = 'payload-formatter:theme:v1';
@@ -33,9 +34,19 @@ let largeText = null;
 let largeFormatted = false;
 const pending = new Map();
 
+const treeController = createTreeController({
+  getText: getPayloadText,
+  detectMode: detectModeFast,
+  setStatus,
+  nextPaint,
+  onFormat: formatPayload,
+  onPasteText: pasteTextAndFormat,
+});
+
 initializeTheme();
 restoreDraft();
 refreshUi();
+treeController.refresh();
 
 editor.addEventListener('input', () => {
   editRevision += 1;
@@ -236,6 +247,7 @@ async function formatCurrentPayload() {
       }
     }
     saveDraftNow();
+    await treeController.refresh();
 
     if (result.bestEffort) {
       setStatus(result.repairNote || 'Formatted with a syntax warning.', 'warning');
@@ -263,6 +275,7 @@ async function pasteAndFormatPayload() {
       return;
     }
 
+    if (treeController.isTree()) resetEditorForReplace();
     acceptPastedText(text);
     await formatCurrentPayload();
   } catch (error) {
@@ -328,6 +341,26 @@ async function writeToClipboard(text) {
   editor.setSelectionRange(0, 0);
 }
 
+async function pasteTextAndFormat(text) {
+  if (busy || !text) return;
+
+  setBusy(true);
+  try {
+    resetEditorForReplace();
+    acceptPastedText(text);
+    await formatCurrentPayload();
+  } finally {
+    setBusy(false);
+  }
+}
+
+function resetEditorForReplace() {
+  if (inLargeMode()) exitLargeMode();
+  editor.value = '';
+  try { editor.setSelectionRange(0, 0); } catch (_) {}
+  clearStoredDraft();
+}
+
 function clearPayload() {
   if (!editor.value && !inLargeMode()) return setStatus('Editor is already empty.');
   exitLargeMode();
@@ -335,8 +368,9 @@ function clearPayload() {
   editRevision += 1;
   clearStoredDraft();
   refreshUi();
+  treeController.refresh();
   setStatus('Cleared.', 'success');
-  editor.focus();
+  if (!treeController.isTree()) editor.focus();
 }
 
 function insertAtSelectionFast(text) {
@@ -355,7 +389,7 @@ function insertAtSelectionFast(text) {
 
   const caret = start + text.length;
   try { editor.setSelectionRange(caret, caret); } catch (_) {}
-  editor.focus();
+  if (!treeController.isTree()) editor.focus();
 }
 
 function refreshUiForInput() {

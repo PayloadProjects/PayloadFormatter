@@ -24,6 +24,7 @@
     </script>
     <title>JSON/XML Formatter</title>
     <link rel="stylesheet" href="./style.css?v=large-preview-20261002-1" />
+    <link rel="stylesheet" href="./tree-view.css?v=tree-view-20261002-1" />
   </head>
   <body>
     <main class="shell">
@@ -49,9 +50,15 @@
       </header>
 
       <section class="workspace" aria-label="JSON/XML formatter">
-        <div class="editor-frame">
+        <div id="editorFrame" class="editor-frame" data-view="text">
           <div class="editor-strip">
-            <span class="editor-label">Payload</span>
+            <div class="editor-strip-left">
+              <span class="editor-label">Payload</span>
+              <div class="view-toggle" role="group" aria-label="Payload view">
+                <button id="viewTextBtn" type="button" aria-pressed="true">Text</button>
+                <button id="viewTreeBtn" type="button" aria-pressed="false">Tree</button>
+              </div>
+            </div>
             <div class="editor-strip-meta">
               <span class="privacy-dot" aria-hidden="true"></span>
               <span class="local-label">Local only</span>
@@ -71,6 +78,27 @@
             placeholder="Paste JSON or XML here..."
             aria-label="JSON or XML payload"
           ></textarea>
+
+          <div id="treePanel" class="tree-panel">
+            <div class="tree-tools">
+              <input
+                id="treeSearch"
+                class="tree-search"
+                type="search"
+                placeholder="Search keys and values…"
+                aria-label="Search the tree"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <button id="treePrev" type="button" title="Previous match" aria-label="Previous tree search match">↑</button>
+              <button id="treeNext" type="button" title="Next match" aria-label="Next tree search match">↓</button>
+              <span id="treeMatchCount" class="tree-match-count" aria-live="polite"></span>
+              <span class="tree-tools-spacer"></span>
+              <button id="treeExpandAll" type="button">Expand all</button>
+              <button id="treeCollapseAll" type="button">Collapse all</button>
+            </div>
+            <div id="treeView" class="tree-view" tabindex="-1"></div>
+          </div>
         </div>
 
         <div class="toolbar">
@@ -94,6 +122,6 @@
       </section>
     </main>
 
-    <script type="module" src="./app.js?v=paste-format-20261002-1"></script>
+    <script type="module" src="./app.js?v=tree-view-20261002-1"></script>
   </body>
 </html>
