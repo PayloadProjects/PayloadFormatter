@@ -17,14 +17,14 @@
 }
 
 .view-toggle button {
-  min-height: 22px;
-  padding: 2px 10px;
+  min-height: 28px;
+  padding: 4px 12px;
   border: 0;
   border-radius: 6px;
   background: transparent;
   color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .view-toggle button:hover:not(:disabled) {
@@ -33,13 +33,14 @@
 }
 
 .view-toggle button[aria-pressed="true"] {
-  background: var(--primary-bg);
-  color: #ffffff;
+  background: var(--selected-bg);
+  color: var(--heading);
 }
 
 /* The frame's data-view decides which pane is visible. */
 .editor-frame[data-view="tree"] .editor,
-.editor-frame[data-view="tree"] .large-notice {
+.editor-frame[data-view="tree"] .large-notice,
+.editor-frame[data-view="tree"] .empty-state {
   display: none;
 }
 
@@ -56,7 +57,8 @@
 }
 
 .tree-tools {
-  padding: 6px 10px;
+  flex: 0 0 auto;
+  padding: 8px 12px;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -68,8 +70,8 @@
 .tree-search {
   min-width: 140px;
   flex: 1 1 180px;
-  max-width: 320px;
-  height: 26px;
+  max-width: 420px;
+  height: 32px;
   padding: 0 9px;
   border: 1px solid var(--button-border);
   border-radius: 7px;
@@ -90,13 +92,13 @@
 }
 
 .tree-tools button {
-  min-height: 26px;
-  padding: 2px 9px;
+  min-height: 32px;
+  padding: 4px 9px;
   font-size: 11px;
 }
 
 .tree-match-count {
-  min-width: 64px;
+  min-width: 0;
   color: var(--muted);
   font-size: 11px;
   white-space: nowrap;
@@ -113,8 +115,8 @@
   padding: 6px 0 14px;
   color: var(--editor-text);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 14px;
+  line-height: 1.6;
   scrollbar-color: var(--scroll-thumb) var(--scroll-track);
 }
 
@@ -148,7 +150,8 @@
   position: relative;
   width: max-content;
   min-width: 100%;
-  padding-right: 8px;
+  padding-right: 12px;
+  padding-block: 2px;
   display: flex;
   align-items: baseline;
   white-space: nowrap;
@@ -286,4 +289,39 @@
   .tree-toggle {
     transition: none;
   }
+}
+
+/* Compact disclosure: normal buttons stay keyboard-accessible without menu-role trapping. */
+.tree-options { position: relative; margin-left: auto; flex: 0 0 auto; }
+.tree-options > .icon-button { min-width: 34px; font-size: 20px; padding: 0 8px; line-height: 1; }
+.tree-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; width: 154px; padding: 4px; border: 1px solid var(--panel-border); border-radius: 9px; background: var(--panel-bg); box-shadow: var(--shadow); }
+.tree-menu button { display: block; width: 100%; text-align: left; border-color: transparent; background: transparent; min-height: 34px; }
+.tree-menu button:hover:not(:disabled) { background: var(--button-hover-bg); }
+.tree-key, .tree-tag { font-weight: 550; }
+.tree-children { position: relative; }
+.tree-children::before { content: ""; position: absolute; pointer-events: none; z-index: 1; left: var(--guide-offset, 14px); top: 0; bottom: 0; border-left: 1px solid var(--guide); }
+.tree-node[aria-level="1"] > .tree-children { --guide-offset: 14px; }
+.tree-node[aria-level="2"] > .tree-children { --guide-offset: 30px; }
+.tree-node[aria-level="3"] > .tree-children { --guide-offset: 46px; }
+.tree-node[aria-level="4"] > .tree-children { --guide-offset: 62px; }
+.tree-node[aria-level="5"] > .tree-children { --guide-offset: 78px; }
+.tree-node[aria-level="6"] > .tree-children { --guide-offset: 94px; }
+.tree-node[aria-level="7"] > .tree-children { --guide-offset: 110px; }
+.tree-node[aria-level="8"] > .tree-children { --guide-offset: 126px; }
+.tree-node[aria-level="9"] > .tree-children { --guide-offset: 142px; }
+.tree-node[aria-level="10"] > .tree-children { --guide-offset: 158px; }
+.tree-node[aria-level="11"] > .tree-children { --guide-offset: 174px; }
+.tree-node[aria-level="12"] > .tree-children { --guide-offset: 190px; }
+.tree-node[aria-level="13"] > .tree-children { --guide-offset: 206px; }
+.tree-node[aria-level="14"] > .tree-children { --guide-offset: 222px; }
+.tree-node[aria-level="15"] > .tree-children { --guide-offset: 238px; }
+.tree-node[aria-level="16"] > .tree-children { --guide-offset: 254px; }
+
+@media (hover: none) { .tree-copy { opacity: 1; } }
+@media (max-width: 520px) {
+  .editor-strip-left { width: auto; }
+  .tree-tools { padding: 6px 8px; gap: 4px; }
+  .tree-search { min-width: 0; flex-basis: 90px; }
+  .tree-match-count { font-size: 10px; }
+  .tree-tools button { min-height: 34px; }
 }

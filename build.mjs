@@ -9,6 +9,7 @@ const files = [
   'tree-controller.js',
   'tree-view.css',
   'app.js',
+  'ui-controls.js',
   'formatter-worker.js',
   'payload-detection.js',
   'resilient-format.js',
