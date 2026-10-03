@@ -24,7 +24,7 @@
     </script>
     <title>JSON/XML Formatter</title>
     <link rel="stylesheet" href="./style.css?v=ui-cleanup-20261003-1" />
-    <link rel="stylesheet" href="./tree-view.css?v=ui-cleanup-20261003-1" />
+    <link rel="stylesheet" href="./tree-view.css?v=tree-actions-visible-v1" />
   </head>
   <body>
     <main class="shell">
@@ -103,12 +103,9 @@
               <button id="treePrev" type="button" title="Previous match" aria-label="Previous tree search match">↑</button>
               <button id="treeNext" type="button" title="Next match" aria-label="Next tree search match">↓</button>
               <span id="treeMatchCount" class="tree-match-count" aria-live="polite"></span>
-              <div class="tree-options">
-                <button id="treeMoreBtn" class="icon-button" type="button" aria-label="Tree actions" title="Tree actions" aria-expanded="false" aria-controls="treeMenu">&#8943;</button>
-                <div id="treeMenu" class="tree-menu" role="group" aria-label="Tree actions" hidden>
-                  <button id="treeExpandAll" type="button">Expand all</button>
-                  <button id="treeCollapseAll" type="button">Collapse all</button>
-                </div>
+              <div class="tree-actions" role="group" aria-label="Tree actions">
+                <button id="treeExpandAll" type="button">Expand all</button>
+                <button id="treeCollapseAll" type="button">Collapse all</button>
               </div>
             </div>
             <div id="treeView" class="tree-view" tabindex="-1"></div>
@@ -137,6 +134,6 @@
     </main>
 
     <script type="module" src="./app.js?v=tree-view-20261002-1"></script>
-    <script type="module" src="./ui-controls.js?v=ui-cleanup-20261003-1"></script>
+    <script type="module" src="./ui-controls.js?v=tree-actions-visible-v1"></script>
   </body>
 </html>

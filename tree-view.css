@@ -291,12 +291,15 @@
   }
 }
 
-/* Compact disclosure: normal buttons stay keyboard-accessible without menu-role trapping. */
-.tree-options { position: relative; margin-left: auto; flex: 0 0 auto; }
-.tree-options > .icon-button { min-width: 34px; font-size: 20px; padding: 0 8px; line-height: 1; }
-.tree-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; width: 154px; padding: 4px; border: 1px solid var(--panel-border); border-radius: 9px; background: var(--panel-bg); box-shadow: var(--shadow); }
-.tree-menu button { display: block; width: 100%; text-align: left; border-color: transparent; background: transparent; min-height: 34px; }
-.tree-menu button:hover:not(:disabled) { background: var(--button-hover-bg); }
+/* Keep frequent tree actions visible and together, including on narrow screens. */
+.tree-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.tree-actions button { white-space: nowrap; }
 .tree-key, .tree-tag { font-weight: 550; }
 .tree-children { position: relative; }
 .tree-children::before { content: ""; position: absolute; pointer-events: none; z-index: 1; left: var(--guide-offset, 14px); top: 0; bottom: 0; border-left: 1px solid var(--guide); }
@@ -321,7 +324,7 @@
 @media (max-width: 520px) {
   .editor-strip-left { width: auto; }
   .tree-tools { padding: 6px 8px; gap: 4px; }
-  .tree-search { min-width: 0; flex-basis: 90px; }
+  .tree-search { min-width: 0; flex-basis: 100%; width: 100%; }
   .tree-match-count { font-size: 10px; }
   .tree-tools button { min-height: 34px; }
 }
