@@ -611,7 +611,10 @@ async function pasteAndFormatPayload() {
       return;
     }
 
-    if (treeController.isTree()) resetEditorForReplace();
+    // The button loads a fresh payload: always replace the editor content so
+    // consecutive pastes never concatenate into one blob. (Native Ctrl/Cmd+V
+    // keeps its insert-at-caret behavior for surgical edits.)
+    resetEditorForReplace();
     acceptPastedText(text);
     await formatCurrentPayload();
   } catch (error) {

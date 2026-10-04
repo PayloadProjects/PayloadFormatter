@@ -17,6 +17,11 @@ assert.ok(app.includes("pasteFormatBtn.addEventListener('click', pasteAndFormatP
   'combined button must trigger one clipboard-and-format workflow');
 assert.ok(app.includes('async function pasteAndFormatPayload()'),
   'combined workflow must be implemented as one guarded async action');
+const pasteFlow = app.match(/async function pasteAndFormatPayload\(\) \{([\s\S]*?)\} catch/)?.[1];
+assert.ok(pasteFlow && pasteFlow.includes('resetEditorForReplace();'),
+  'the button loads a fresh payload: it replaces instead of appending');
+assert.ok(pasteFlow && !pasteFlow.includes('isTree()'),
+  'replace applies in every view, so consecutive pastes never concatenate');
 assert.ok(app.includes('acceptPastedText(text);\n    await formatCurrentPayload();'),
   'clipboard text must be accepted before the same formatter path runs');
 assert.ok(app.includes('async function formatCurrentPayload()'),
