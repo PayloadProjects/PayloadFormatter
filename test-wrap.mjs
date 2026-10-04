@@ -65,14 +65,14 @@ assert.match(css, /\.strip-btn\[aria-pressed="true"\]/,
 // Compact chrome: the payload panel gets the space, chrome shrinks.
 assert.match(css, /\.shell \{[^}]*padding: 8px 12px 10px;[^}]*gap: 8px;/,
   'shell padding and gap are compact');
-assert.match(css, /\.topbar \{ min-height: 32px;/, 'topbar is slimmer');
-assert.match(css, /\.brand-mark \{ width: 26px; height: 26px;/, 'brand mark is smaller');
+assert.match(css, /\.topbar \{ min-height: 28px;/, 'topbar is slimmer');
+assert.match(css, /\.brand-mark \{ width: 22px; height: 22px;/, 'brand mark is smaller');
 assert.match(css, /h1 \{[^}]*font-size: 15px;/, 'heading is smaller');
-assert.match(css, /\.editor-strip \{ min-height: 34px;[^}]*padding: 3px 10px;/,
+assert.match(css, /\.editor-strip \{ min-height: 28px;[^}]*padding: 2px 10px;/,
   'editor strip is slimmer');
-assert.match(css, /\.toolbar \{ min-height: 44px;[^}]*padding: 5px 10px;/,
+assert.match(css, /\.toolbar \{ min-height: 38px;[^}]*padding: 4px 10px;/,
   'toolbar is slimmer');
-assert.match(treeCss, /\.tree-search \{[^}]*height: 28px;/,
+assert.match(treeCss, /\.tree-search \{[^}]*height: 24px;/,
   'tree search input matches the slimmer strip');
 // The mirror overlay paddings must track the editor padding exactly.
 assert.match(css, /\.editor \{[^}]*padding: 12px;/, 'editor padding is compact');
