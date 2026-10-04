@@ -181,19 +181,20 @@ h1 { margin: 0; color: var(--heading); font-size: 15px; line-height: 1.25; font-
 /* Payload windows: tab bar for juggling payloads without browser tabs.
    Inactive tabs are quiet labels; the active tab merges into the strip below,
    like a browser tab merging into its toolbar. */
-.window-bar { flex: 0 0 auto; display: flex; align-items: flex-end; gap: 4px; min-height: 34px; padding: 8px 12px 0; background: var(--panel-bg); border-bottom: 1px solid var(--panel-border); }
-.window-tabs { min-width: 0; flex: 0 1 auto; display: flex; align-items: flex-end; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
-.window-tab { flex: 0 0 auto; display: flex; align-items: center; gap: 2px; max-width: 180px; padding: 4px 4px 4px 10px; border: 1px solid transparent; border-bottom: 0; border-radius: 8px 8px 0 0; background: transparent; }
+.window-bar { flex: 0 0 auto; display: flex; align-items: flex-end; gap: 4px; min-height: 28px; padding: 4px 12px 0; background: var(--panel-bg); border-bottom: 1px solid var(--panel-border); }
+.window-tabs { min-width: 0; flex: 0 1 auto; display: flex; align-items: flex-end; gap: 2px; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
+.window-tabs::-webkit-scrollbar { display: none; }
+.window-tab { flex: 0 0 auto; display: flex; align-items: center; gap: 2px; max-width: 180px; padding: 2px 2px 2px 8px; border: 1px solid transparent; border-bottom: 0; border-radius: 8px 8px 0 0; background: transparent; }
 .window-tab:hover { background: var(--button-hover-bg); }
-.window-tab.is-active { background: var(--strip-bg); border-color: var(--panel-border); margin-bottom: -1px; padding-bottom: 5px; }
+.window-tab.is-active { background: var(--strip-bg); border-color: var(--panel-border); margin-bottom: -1px; padding-bottom: 3px; }
 .window-tab.is-active:hover { background: var(--strip-bg); }
-.window-tab-select { min-width: 0; min-height: 22px; padding: 1px 4px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; max-width: 140px; }
+.window-tab-select { min-width: 0; min-height: 18px; padding: 1px 4px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; max-width: 140px; }
 .window-tab.is-active .window-tab-select { color: var(--heading); }
 .window-tab-name { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.window-tab-close { flex: 0 0 auto; min-height: 22px; min-width: 22px; padding: 0 4px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 13px; line-height: 1; }
+.window-tab-close { flex: 0 0 auto; min-height: 18px; min-width: 18px; padding: 0 3px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 12px; line-height: 1; }
 .window-tab-close:hover:not(:disabled) { color: var(--danger-text); background: var(--danger-hover-bg); }
-.window-rename-input { width: 120px; min-height: 22px; padding: 1px 4px; border: 1px solid var(--editor-focus); border-radius: 4px; background: var(--editor-bg); color: var(--editor-text); font: inherit; font-size: 12px; font-weight: 600; }
-.window-new { flex: 0 0 auto; align-self: center; min-height: 26px; min-width: 30px; margin-bottom: 2px; padding: 2px 6px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--muted); font-size: 15px; line-height: 1; cursor: pointer; }
+.window-rename-input { width: 120px; min-height: 18px; padding: 1px 4px; border: 1px solid var(--editor-focus); border-radius: 4px; background: var(--editor-bg); color: var(--editor-text); font: inherit; font-size: 12px; font-weight: 600; }
+.window-new { flex: 0 0 auto; align-self: center; min-height: 22px; min-width: 26px; margin-bottom: 2px; padding: 1px 6px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--muted); font-size: 14px; line-height: 1; cursor: pointer; }
 .window-new:hover { background: var(--button-hover-bg); color: var(--heading); border-color: var(--panel-border); }
 .editor-strip { min-height: 28px; flex: 0 0 auto; padding: 2px 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--panel-border); background: var(--strip-bg); }
 .editor-strip-meta { display: flex; align-items: center; gap: 8px; min-width: 0; }
