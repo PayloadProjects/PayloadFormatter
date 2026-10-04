@@ -184,7 +184,10 @@ h1 { margin: 0; color: var(--heading); font-size: 15px; line-height: 1.25; font-
 .window-bar { flex: 0 0 auto; display: flex; align-items: flex-end; gap: 4px; min-height: 28px; padding: 4px 12px 0; background: var(--panel-bg); border-bottom: 1px solid var(--panel-border); }
 .window-tabs { min-width: 0; flex: 0 1 auto; display: flex; align-items: flex-end; gap: 2px; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
 .window-tabs::-webkit-scrollbar { display: none; }
-.window-tab { flex: 0 0 auto; display: flex; align-items: center; gap: 2px; max-width: 180px; padding: 2px 2px 2px 8px; border: 1px solid transparent; border-bottom: 0; border-radius: 8px 8px 0 0; background: transparent; }
+/* Chrome-style squeezing: tabs shrink proportionally to share the strip down
+   to a readable minimum instead of scrolling. The strip only scrolls (with a
+   hidden scrollbar) on viewports too narrow to fit every tab at minimum. */
+.window-tab { flex: 1 1 auto; min-width: 56px; max-width: 180px; display: flex; align-items: center; gap: 2px; padding: 2px 2px 2px 8px; border: 1px solid transparent; border-bottom: 0; border-radius: 8px 8px 0 0; background: transparent; }
 .window-tab:hover { background: var(--button-hover-bg); }
 .window-tab.is-active { background: var(--strip-bg); border-color: var(--panel-border); margin-bottom: -1px; padding-bottom: 3px; }
 .window-tab.is-active:hover { background: var(--strip-bg); }

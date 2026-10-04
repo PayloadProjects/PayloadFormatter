@@ -5,7 +5,7 @@
 // manager only serializes the lightweight list (ids, names, active, counter).
 import { createPayloadHistory } from './payload-history.js';
 
-export const MAX_WINDOWS = 10;
+export const MAX_WINDOWS = 20;
 export const MAX_WINDOW_NAME_LENGTH = 40;
 
 export function createWindowManager() {
