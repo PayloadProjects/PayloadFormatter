@@ -4,6 +4,7 @@ import { createSyntaxEditor } from './text-editor.js';
 
 const STORAGE_KEY = 'payload-formatter:draft:v1';
 const THEME_STORAGE_KEY = 'payload-formatter:theme:v1';
+const WRAP_STORAGE_KEY = 'payload-formatter:wrap:v1';
 const MAX_DRAFT_BYTES = 2 * 1024 * 1024;
 const LARGE_UI_PAYLOAD_CHARS = 512 * 1024;
 const LARGE_PAYLOAD_CHARS = 2 * 1024 * 1024;
@@ -23,6 +24,7 @@ const largeNotice = document.querySelector('#largeNotice');
 const themeToggleBtn = document.querySelector('#themeToggleBtn');
 const themeIcon = document.querySelector('#themeIcon');
 const themeLabel = document.querySelector('#themeLabel');
+const wrapToggleBtn = document.querySelector('#wrapToggleBtn');
 const root = document.documentElement;
 
 let busy = false;
@@ -47,6 +49,7 @@ const treeController = createTreeController({
 });
 
 initializeTheme();
+initializeWrap();
 restoreDraft();
 refreshUi();
 treeController.refresh();
@@ -93,6 +96,9 @@ clearBtn.addEventListener('click', clearPayload);
 themeToggleBtn?.addEventListener('click', () => {
   applyTheme(currentTheme() === 'dark' ? 'light' : 'dark', { persist: true });
 });
+wrapToggleBtn?.addEventListener('click', () => {
+  applyWrap(root.dataset.wrap !== 'on', { persist: true });
+});
 
 function initializeTheme() {
   const saved = readStoredTheme();
@@ -131,6 +137,34 @@ function updateThemeControl(theme) {
   themeToggleBtn.dataset.theme = theme;
   themeToggleBtn.setAttribute('aria-label', `Switch to ${next} mode`);
   themeToggleBtn.title = `Switch to ${next} mode`;
+}
+
+function initializeWrap() {
+  applyWrap(readStoredWrap(), { persist: false });
+}
+
+function readStoredWrap() {
+  try {
+    return localStorage.getItem(WRAP_STORAGE_KEY) === 'on';
+  } catch (_) {
+    return false;
+  }
+}
+
+function applyWrap(on, { persist = false } = {}) {
+  const next = on ? 'on' : 'off';
+  root.dataset.wrap = next;
+  editor.wrap = on ? 'soft' : 'off';
+  if (wrapToggleBtn) {
+    wrapToggleBtn.setAttribute('aria-pressed', String(on));
+    wrapToggleBtn.title = on
+      ? 'Unwrap long lines'
+      : 'Wrap long lines (syntax colors pause while wrap is on)';
+  }
+  if (persist) {
+    try { localStorage.setItem(WRAP_STORAGE_KEY, next); } catch (_) {}
+  }
+  syntaxEditor.refresh();
 }
 
 

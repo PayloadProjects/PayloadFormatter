@@ -21,11 +21,18 @@
         document.documentElement.dataset.theme = theme;
         document.documentElement.style.colorScheme = theme;
       })();
+      (() => {
+        let wrap = 'off';
+        try {
+          if (localStorage.getItem('payload-formatter:wrap:v1') === 'on') wrap = 'on';
+        } catch (_) {}
+        document.documentElement.dataset.wrap = wrap;
+      })();
     </script>
     <title>JSON/XML Formatter</title>
-    <link rel="stylesheet" href="./style.css?v=readability-v1" />
+    <link rel="stylesheet" href="./style.css?v=wrap-compact-v1" />
     <link rel="stylesheet" href="./tree-view.css?v=readability-v1" />
-    <link rel="stylesheet" href="./text-editor.css?v=readability-v1" />
+    <link rel="stylesheet" href="./text-editor.css?v=wrap-compact-v1" />
   </head>
   <body>
     <main class="shell">
@@ -64,6 +71,13 @@
               </div>
             </div>
             <div class="editor-strip-meta">
+              <button
+                id="wrapToggleBtn"
+                class="strip-btn"
+                type="button"
+                aria-pressed="false"
+                title="Wrap long lines (syntax colors pause while wrap is on)"
+              >Wrap</button>
               <span id="typeBadge" class="type-badge" aria-live="polite">Waiting for payload</span>
             </div>
           </div>
@@ -142,7 +156,7 @@
       </section>
     </main>
 
-    <script type="module" src="./app.js?v=readability-v1"></script>
+    <script type="module" src="./app.js?v=wrap-compact-v1"></script>
     <script type="module" src="./ui-controls.js?v=tree-actions-visible-v1"></script>
   </body>
 </html>

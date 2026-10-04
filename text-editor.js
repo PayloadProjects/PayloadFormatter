@@ -11,6 +11,7 @@ export function createSyntaxEditor(editor) {
   const frame = document.querySelector('#editorFrame');
   if (!host || !viewport || !mirror || !gutter || !active) return { refresh() {} };
   let snapshot = '', mode = null, revision = 0, model = null;
+  let wrapOn = document.documentElement.dataset.wrap === 'on';
   let worker = null, running = null, pending = null;
   let timer = 0, deadline = 0, paint = 0, composing = false, disposed = false;
   const visible = () => frame?.dataset.view !== 'tree';
@@ -58,15 +59,24 @@ export function createSyntaxEditor(editor) {
   function refresh(nextMode = mode) {
     if (disposed) return;
     const text = editor.value;
-    const changed = text !== snapshot || nextMode !== mode;
+    const wrapNow = document.documentElement.dataset.wrap === 'on';
+    const changed = text !== snapshot || nextMode !== mode || wrapNow !== wrapOn;
     if (!changed && model && !composing) { scheduleRender(); return; }
     if (changed) {
-      snapshot = text; mode = nextMode; revision += 1; model = null;
+      snapshot = text; mode = nextMode; wrapOn = wrapNow; revision += 1; model = null;
       pending = null;
     }
     clearTimeout(timer);
     plain(text ? 'pending' : 'empty');
     if (!text) { mirror.replaceChildren(); gutter.replaceChildren(); return; }
+    if (wrapOn) {
+      // The overlay maps one source line to one visual row, so it cannot track
+      // wrapped text. Stand down to the plain native editor while wrap is on.
+      plain('wrap');
+      mirror.replaceChildren(); gutter.replaceChildren();
+      host.style.removeProperty('--gutter-width');
+      return;
+    }
     if (text.length > MAX_HIGHLIGHT_CHARS) { plain('size-limit'); return; }
     if (composing || !visible()) return;
     // Only one active request and one replaceable pending snapshot.
@@ -76,6 +86,7 @@ export function createSyntaxEditor(editor) {
 
   function render() {
     if (!model || composing || !visible() || disposed) return;
+    if (document.documentElement.dataset.wrap === 'on') { plain('wrap'); return; }
     const style = getComputedStyle(editor);
     const height = editor.clientHeight, width = editor.clientWidth;
     if (!height || !width) return;

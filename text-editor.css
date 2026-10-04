@@ -23,8 +23,8 @@
 }
 .text-editor .editor { position: relative; z-index: 1; margin-left: var(--gutter-width); width: calc(100% - var(--gutter-width)); padding-left: 12px; }
 .syntax-viewport { position: absolute; inset: 0 auto auto 0; overflow: hidden; pointer-events: none; visibility: hidden; }
-.syntax-mirror { position: absolute; top: 0; left: 0; margin: 0; padding: 16px 16px 16px calc(var(--gutter-width) + 12px); white-space: pre; color: var(--editor-text); }
-.syntax-gutter { position: absolute; top: 0; left: 0; width: var(--gutter-width); padding: 16px 8px 16px 0; color: var(--syntax-muted); background: var(--editor-bg); text-align: right; border-right: 1px solid var(--guide); }
+.syntax-mirror { position: absolute; top: 0; left: 0; margin: 0; padding: 12px 12px 12px calc(var(--gutter-width) + 12px); white-space: pre; color: var(--editor-text); }
+.syntax-gutter { position: absolute; top: 0; left: 0; width: var(--gutter-width); padding: 12px 8px 12px 0; color: var(--syntax-muted); background: var(--editor-bg); text-align: right; border-right: 1px solid var(--guide); }
 .syntax-gutter .current-line { color: var(--editor-text); }
 .syntax-active-line { position: absolute; left: 0; right: 0; background: var(--tree-hover-bg); }
 .has-syntax .syntax-viewport { visibility: visible; }
