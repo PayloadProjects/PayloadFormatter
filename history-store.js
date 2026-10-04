@@ -20,6 +20,29 @@ function keyFor(tabId, windowId) {
   return `${tabId}:${windowId}`;
 }
 
+// Entries above this size are stored as Blobs instead of inline strings.
+// IndexedDB keeps Blobs as separate files on disk, so a 20MB payload skips
+// the structured-clone copy and doesn't balloon a single record. Small
+// entries stay plain strings: cheaper, and inspectable in devtools.
+const BLOB_ENTRY_BYTES = 2 * 1024 * 1024;
+
+function toStorable(entry) {
+  const text = String(entry ?? '');
+  return text.length > BLOB_ENTRY_BYTES
+    ? new Blob([text], { type: 'text/plain;charset=utf-8' })
+    : text;
+}
+
+async function fromStorable(entry) {
+  if (entry instanceof Blob) return await entry.text();
+  return String(entry ?? '');
+}
+
+async function restoreEntries(entries) {
+  if (!Array.isArray(entries)) return [];
+  return Promise.all(entries.map(fromStorable));
+}
+
 // In-memory backend: used when IndexedDB is unavailable (jsdom, blocked
 // third-party contexts) and as the fallback when IndexedDB fails mid-run.
 // Module-level on purpose: it is shared by every importer in the process,
@@ -32,7 +55,9 @@ function createMemoryBackend() {
       const prefix = `${tabId}:`;
       const out = [];
       for (const record of records.values()) {
-        if (record.key.startsWith(prefix)) out.push({ ...record });
+        if (record.key.startsWith(prefix)) {
+          out.push({ ...record, entries: await restoreEntries(record.entries) });
+        }
       }
       return out;
     },
@@ -40,7 +65,7 @@ function createMemoryBackend() {
       records.set(keyFor(tabId, windowId), {
         key: keyFor(tabId, windowId),
         windowId,
-        entries: snapshot.entries,
+        entries: snapshot.entries.map(toStorable),
         index: snapshot.index,
         updatedAt: Date.now(),
       });
@@ -114,16 +139,20 @@ function createIndexedDbBackend() {
       const objectStore = await store('readonly');
       const records = await requestToPromise(objectStore.getAll());
       const prefix = `${tabId}:`;
-      return records
-        .filter((record) => record && typeof record.key === 'string' && record.key.startsWith(prefix))
-        .map((record) => ({ ...record }));
+      const out = [];
+      for (const record of records) {
+        if (record && typeof record.key === 'string' && record.key.startsWith(prefix)) {
+          out.push({ ...record, entries: await restoreEntries(record.entries) });
+        }
+      }
+      return out;
     },
     async save(tabId, windowId, snapshot) {
       const objectStore = await store('readwrite');
       await requestToPromise(objectStore.put({
         key: keyFor(tabId, windowId),
         windowId,
-        entries: snapshot.entries,
+        entries: snapshot.entries.map(toStorable),
         index: snapshot.index,
         updatedAt: Date.now(),
       }));
@@ -197,6 +226,18 @@ export async function deleteWindowHistory(tabId, windowId) {
 export async function cleanupStaleHistories(maxAgeMs = 7 * 24 * 3600 * 1000) {
   try {
     await getBackend().cleanup(Date.now() - maxAgeMs);
+  } catch (_) {}
+}
+
+// Ask the browser not to evict this origin's storage under disk pressure.
+// Best-effort and silent: Safari can still drop it (7-day ITP rule), and the
+// app already degrades to session-only history when storage goes away.
+export function requestPersistence() {
+  try {
+    const storage = typeof navigator !== 'undefined' ? navigator.storage : null;
+    if (storage && typeof storage.persist === 'function') {
+      Promise.resolve(storage.persist()).catch(() => {});
+    }
   } catch (_) {}
 }
 

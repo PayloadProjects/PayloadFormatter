@@ -477,6 +477,76 @@ __clearMemoryBackend();
     "Window 2's history is untouched by Window 1's typing",
   );
 }
+// --- Phase 3: large entries persist as Blobs, quota failure degrades --------
+{
+  // A 3MB entry (over the 2MB Blob threshold) round-trips through the real
+  // memory backend as an identical string.
+  const big = `{"blob":true,"pad":"${'z'.repeat(3 * 1024 * 1024)}"}`;
+  assert.equal(await saveWindowHistory('blob-tab', 'w1', { entries: ['small', big], index: 1 }), true);
+  const loaded = await loadWindowHistories('blob-tab');
+  assert.equal(loaded.length, 1, 'record stored');
+  assert.deepEqual(
+    loaded[0].entries.map((entry) => typeof entry),
+    ['string', 'string'],
+    'entries come back as strings, never Blobs',
+  );
+  assert.equal(loaded[0].entries[1], big, '3MB entry survives the Blob round-trip byte-for-byte');
+  assert.equal(loaded[0].index, 1, 'position survives');
+  await deleteWindowHistory('blob-tab', 'w1');
+
+  // Quota failure: the save reports false, nothing throws, the app is fine.
+  __useTestBackend({
+    async save() {
+      const error = new Error('Quota exceeded');
+      error.name = 'QuotaExceededError';
+      throw error;
+    },
+    async loadAll() { return []; },
+    async remove() {},
+    async cleanup() {},
+  });
+  assert.equal(
+    await saveWindowHistory('quota-tab', 'w1', { entries: ['x'], index: 0 }),
+    false,
+    'QuotaExceededError degrades to false instead of throwing',
+  );
+  assert.deepEqual(await loadWindowHistories('quota-tab'), [], 'failed backend loads nothing');
+  __useTestBackend(null);
+}
+
+// --- Phase 3: a 5MB payload survives a refresh via history -----------------
+{
+  __clearMemoryBackend();
+  const domA = new JSDOM(html, { url: 'http://localhost/', pretendToBeVisual: true });
+  installGlobals(domA);
+  const appA = await import('./app.js?history-persist=9');
+  await appA.__historyHydrated();
+  const editorA = domA.window.document.querySelector('#payloadInput');
+
+  const five = JSON.stringify({ restored: true, pad: 'y'.repeat(5 * 1024 * 1024) });
+  await ctrlVPaste(domA, editorA, five);
+  await appA.__flushHistorySaves();
+  const stored = await loadWindowHistories(appA.__getTabId());
+  assert.equal(stored.length, 1, 'window history persisted');
+  assert.ok(
+    stored[0].entries.some((entry) => entry.length > 4 * 1024 * 1024),
+    'the 5MB entry persisted (above the old 2MB cutoff)',
+  );
+  const snapshot = snapshotStorage();
+
+  // Real refresh: new page, same sessionStorage. The 5MB draft was never
+  // saved (2MB sessionStorage rule), so restoration must come from history.
+  const domB = new JSDOM(html, { url: 'http://localhost/', pretendToBeVisual: true });
+  for (const [key, value] of Object.entries(snapshot)) {
+    domB.window.sessionStorage.setItem(key, value);
+  }
+  installGlobals(domB);
+  const appB = await import('./app.js?history-persist=10');
+  await appB.__historyHydrated();
+  const editorB = domB.window.document.querySelector('#payloadInput');
+  assert.equal(editorB.value, five, '5MB payload seeded into the editor from persisted history');
+  assert.equal(editorB.readOnly, false, 'restored 5MB payload stays editable');
+}
 __clearMemoryBackend();
 
 console.log('All history persistence tests passed.');

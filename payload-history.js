@@ -105,10 +105,9 @@ export function createPayloadHistory({ maxEntries = DEFAULT_MAX_ENTRIES, maxByte
       revision += 1;
       return true;
     },
-    // Snapshot for persistence. Entries the predicate rejects (oversize
-    // payloads: large payloads are never persisted, matching the draft rule)
-    // are dropped; the index is remapped to the nearest surviving entry at
-    // or before the old position.
+    // Snapshot for persistence. Entries the predicate rejects (above the
+    // caller's persist cap) are dropped; the index is remapped to the
+    // nearest surviving entry at or before the old position.
     toPersistable(isPersistable) {
       const kept = [];
       const remap = new Array(entries.length).fill(-1);
