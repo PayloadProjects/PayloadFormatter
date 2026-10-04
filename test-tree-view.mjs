@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { parseTree, childAt, TREE_MAX_CHARS } from './tree-view.js';
+import { parseTree, childAt, TREE_MAX_CHARS, searchNeedles, nodeMatches } from './tree-view.js';
 
 const [app, html, css, controller, build, pkg] = await Promise.all([
   readFile(new URL('./app.js', import.meta.url), 'utf8'),
@@ -146,5 +146,45 @@ const noDom = parseTree('<a/>', 'xml', { DOMParserImpl: null });
 if (typeof globalThis.DOMParser === 'undefined') {
   assert.ok(noDom.error, 'XML without DOMParser reports a clear error');
 }
+
+// --- Search tolerates quotes copied from formatted payloads.
+// Regression: searching for "user1@example.com" (quotes included, as copied
+// from formatted JSON) reported "No matches" even though the value was there.
+assert.deepEqual(searchNeedles('"user1@example.com"'),
+  ['"user1@example.com"', 'user1@example.com'],
+  'double-quoted query also tries the de-quoted value');
+assert.deepEqual(searchNeedles("'abc'"), ["'abc'", 'abc'],
+  'single-quoted query also tries the de-quoted value');
+assert.deepEqual(searchNeedles('abc'), ['abc'],
+  'unquoted query is unchanged');
+assert.deepEqual(searchNeedles('  '), [], 'blank query finds nothing');
+assert.deepEqual(searchNeedles('""'), ['""'], 'empty quotes stay literal');
+assert.deepEqual(searchNeedles('"A@B.c"'), ['"a@b.c"', 'a@b.c'],
+  'needles are lowercased like the indexed text');
+
+const people = parseTree(JSON.stringify([{ email: 'user1@example.com', id: 2 }]), 'json');
+const person = childAt(people.root, 0);
+const emailNode = childAt(person, 0);
+assert.equal(emailNode.key, 'email');
+assert.ok(nodeMatches(emailNode, searchNeedles('"user1@example.com"')),
+  'quoted value pasted from formatted JSON matches the tree node');
+assert.ok(nodeMatches(emailNode, searchNeedles('user1@example.com')),
+  'plain value still matches');
+const idNode = childAt(person, 1);
+assert.equal(idNode.key, 'id');
+assert.ok(!nodeMatches(emailNode, searchNeedles('"2"')),
+  'quoted "2" does not match the email node');
+assert.ok(nodeMatches(idNode, searchNeedles('"2"')),
+  'quoted "2" matches the numeric id node');
+assert.ok(!nodeMatches(emailNode, searchNeedles('nobody@example.com')),
+  'non-matching value still reports no match');
+
+// XML parity: attribute values are quoted in markup, unquoted in the model.
+assert.ok(nodeMatches(xmlFirst, searchNeedles('"1"')),
+  'quoted XML attribute value matches');
+assert.ok(!nodeMatches(xmlFirst, searchNeedles('"2"')),
+  'wrong quoted XML attribute value does not match');
+assert.ok(nodeMatches(xmlFirst, searchNeedles('Alpha')),
+  'XML text content still matches unquoted');
 
 console.log('All tree view regression tests passed.');

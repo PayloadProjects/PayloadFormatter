@@ -113,7 +113,24 @@ export function childAt(node, index) {
   return node.kind === 'json' ? jsonChild(node, index) : xmlChild(node, index);
 }
 
-function nodeMatches(node, query) {
+// Users routinely paste values copied from formatted JSON/XML, quotes included
+// ("email": "user1@example.com" copies as "user1@example.com"). Keep the literal
+// query and add the de-quoted variant as an extra candidate: stripping only
+// ever widens the search, never narrows it.
+export function searchNeedles(query) {
+  const base = String(query || '').trim().toLowerCase();
+  if (!base) return [];
+  const unwrapped = base.match(/^(['"])([\s\S]*)\1$/);
+  const inner = unwrapped ? unwrapped[2].trim() : '';
+  return inner ? [base, inner] : [base];
+}
+
+export function nodeMatches(node, needles) {
+  const list = Array.isArray(needles) ? needles : [needles];
+  return list.some((query) => nodeMatchesOne(node, query));
+}
+
+function nodeMatchesOne(node, query) {
   if (node.kind === 'json') {
     if (node.key !== null && String(node.key).toLowerCase().includes(query)) return true;
     if (node.type === 'array' || node.type === 'object') return false;
@@ -584,8 +601,8 @@ export function createTreeView(container, { onCopyPath } = {}) {
       lastTruncated = false;
       matchPaths.clear();
       for (const li of container.querySelectorAll('.tree-match')) li.classList.remove('tree-match');
-      const needle = String(query || '').trim().toLowerCase();
-      if (!needle || !root) return summary();
+      const needle = searchNeedles(query);
+      if (!needle.length || !root) return summary();
 
       if (nodeMatches(root, needle)) matches.push([]);
       const stack = [{ node: root, next: 0, path: [] }];
