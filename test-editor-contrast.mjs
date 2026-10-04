@@ -50,6 +50,6 @@ assert.match(treeCss,/\.tree-view\s*\{[^}]*background:\s*var\(--editor-bg\)/);
 for(const token of readingTokens.slice(1)) {
   assert.ok(treeCss.includes(`var(${token})`));assert.ok(textCss.includes(`var(${token})`));
 }
-assert.match(treeCss,/outline:\s*1px solid var\(--tree-hit-border\)/,'current search hit has a non-color-only cue');
+assert.match(treeCss,/\.tree-hit \.tree-hit-text\s*\{[^}]*box-shadow:\s*0 0 0 1px var\(--tree-hit-border\)/,'current search hit has a non-color-only cue');
 for(const file of ['style','tree-view','text-editor']) assert.match(html,new RegExp(file+'\\.css\\?v=[\\w.-]+'));
 console.log('Text/Tree syntax contrast passed in both themes, including active/selected states.');

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { parseTree, childAt, TREE_MAX_CHARS, searchNeedles, nodeMatches } from './tree-view.js';
+import { parseTree, childAt, TREE_MAX_CHARS, searchNeedles, nodeMatches, highlightRanges } from './tree-view.js';
 
 const [app, html, css, controller, build, pkg] = await Promise.all([
   readFile(new URL('./app.js', import.meta.url), 'utf8'),
@@ -186,5 +186,35 @@ assert.ok(!nodeMatches(xmlFirst, searchNeedles('"2"')),
   'wrong quoted XML attribute value does not match');
 assert.ok(nodeMatches(xmlFirst, searchNeedles('Alpha')),
   'XML text content still matches unquoted');
+
+// --- Search hits highlight the matched text, never the whole row.
+// Regression: the hit row was painted full-width amber; only the found
+// text should carry the highlight, with the current hit tinted stronger.
+assert.deepEqual(highlightRanges('user1@example.com', ['user1@example.com']),
+  [[0, 17]], 'single needle gives one range');
+assert.deepEqual(highlightRanges('user1@example.com', ['"user1@example.com"', 'user1@example.com']),
+  [[0, 17]], 'quoted and de-quoted needles merge into one range');
+assert.deepEqual(highlightRanges('aaa', ['a']), [[0, 3]],
+  'adjacent occurrences merge');
+assert.deepEqual(highlightRanges('abcabc', ['abc']), [[0, 6]],
+  'touching occurrences merge into one highlight');
+assert.deepEqual(highlightRanges('abxabc', ['abc']), [[3, 6]],
+  'separate occurrences each highlight');
+assert.deepEqual(highlightRanges('AbC', ['b']), [[1, 2]],
+  'matching is case-insensitive');
+assert.equal(highlightRanges('abc', ['x']), null, 'no match returns null');
+assert.equal(highlightRanges('abc', []), null, 'no needles returns null');
+
+const treeViewSrc = await readFile(new URL('./tree-view.js', import.meta.url), 'utf8');
+assert.ok(treeViewSrc.includes('paintRowHits(li)'),
+  'rendered rows and fresh searches repaint hit text');
+assert.ok(treeViewSrc.includes('mark.className = \'tree-hit-text\''),
+  'hit text is wrapped in a dedicated span');
+assert.ok(css.includes('.tree-hit-text'),
+  'hit text has its own style rule');
+assert.ok(css.includes('.tree-hit .tree-hit-text'),
+  'the current hit keeps a stronger tint');
+assert.ok(!css.includes('.tree-match > .tree-row') && !css.includes('.tree-hit > .tree-row'),
+  'no rule paints the whole row for a match anymore');
 
 console.log('All tree view regression tests passed.');

@@ -286,6 +286,32 @@ function xmlLabel(node) {
   }
 }
 
+// Case-insensitive match ranges for every needle, merged so overlapping
+// candidates (e.g. a quoted and a de-quoted needle) paint one span.
+export function highlightRanges(text, needles) {
+  const lower = String(text).toLowerCase();
+  const ranges = [];
+  for (const needle of needles || []) {
+    if (!needle) continue;
+    let from = 0;
+    for (;;) {
+      const at = lower.indexOf(needle, from);
+      if (at === -1) break;
+      ranges.push([at, at + needle.length]);
+      from = at + needle.length;
+    }
+  }
+  if (!ranges.length) return null;
+  ranges.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const merged = [];
+  for (const [start, end] of ranges) {
+    const last = merged[merged.length - 1];
+    if (last && start <= last[1]) last[1] = Math.max(last[1], end);
+    else merged.push([start, end]);
+  }
+  return merged;
+}
+
 export function createTreeView(container, { onCopyPath } = {}) {
   let root = null;
   let rootLi = null;
@@ -295,6 +321,7 @@ export function createTreeView(container, { onCopyPath } = {}) {
   let current = -1;
   let hitLi = null;
   let matchPaths = new Set();
+  let needles = [];
 
   container.addEventListener('click', onClick);
   container.addEventListener('keydown', onKeydown);
@@ -309,6 +336,7 @@ export function createTreeView(container, { onCopyPath } = {}) {
     current = -1;
     hitLi = null;
     matchPaths.clear();
+    needles = [];
   }
 
   function showMessage(title, detail, tone = '') {
@@ -362,7 +390,42 @@ export function createTreeView(container, { onCopyPath } = {}) {
     li.appendChild(row);
     if (node.container) li.setAttribute('aria-expanded', 'false');
     if (open && node.container) setOpen(li, true);
+    paintRowHits(li);
     return li;
+  }
+
+  // Search hits highlight the found text itself, never the whole row.
+  // Unwrapping first keeps repainting (new search, stepped hit, re-render)
+  // from ever nesting highlight spans.
+  function paintRowHits(li) {
+    const row = li.firstElementChild;
+    if (!row) return;
+    for (const mark of row.querySelectorAll('.tree-hit-text')) {
+      mark.replaceWith(document.createTextNode(mark.textContent));
+    }
+    row.normalize();
+    if (!needles.length || !matchPaths.has(li._searchPath)) return;
+    const walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT);
+    const texts = [];
+    let textNode;
+    while ((textNode = walker.nextNode())) texts.push(textNode);
+    for (const node of texts) {
+      const ranges = highlightRanges(node.nodeValue, needles);
+      if (!ranges) continue;
+      const value = node.nodeValue;
+      const frag = document.createDocumentFragment();
+      let cursor = 0;
+      for (const [start, end] of ranges) {
+        if (start > cursor) frag.append(document.createTextNode(value.slice(cursor, start)));
+        const mark = document.createElement('span');
+        mark.className = 'tree-hit-text';
+        mark.textContent = value.slice(start, end);
+        frag.append(mark);
+        cursor = end;
+      }
+      if (cursor < value.length) frag.append(document.createTextNode(value.slice(cursor)));
+      node.replaceWith(frag);
+    }
   }
 
   function renderChunk(li, upTo) {
@@ -601,10 +664,10 @@ export function createTreeView(container, { onCopyPath } = {}) {
       lastTruncated = false;
       matchPaths.clear();
       for (const li of container.querySelectorAll('.tree-match')) li.classList.remove('tree-match');
-      const needle = searchNeedles(query);
-      if (!needle.length || !root) return summary();
+      needles = searchNeedles(query);
+      if (!needles.length || !root) return summary();
 
-      if (nodeMatches(root, needle)) matches.push([]);
+      if (nodeMatches(root, needles)) matches.push([]);
       const stack = [{ node: root, next: 0, path: [] }];
       let visits = 0;
       while (stack.length) {
@@ -619,7 +682,7 @@ export function createTreeView(container, { onCopyPath } = {}) {
         visits += 1;
         const child = childAt(frame.node, index);
         const path = frame.path.concat(index);
-        if (nodeMatches(child, needle)) matches.push(path);
+        if (nodeMatches(child, needles)) matches.push(path);
         if (child.container) stack.push({ node: child, next: 0, path });
       }
       lastTruncated = stack.length > 0;
@@ -627,6 +690,7 @@ export function createTreeView(container, { onCopyPath } = {}) {
       // Only paint existing rows; never expand/materialize the tree to mark hits.
       for (const li of container.querySelectorAll('.tree-node')) {
         li.classList.toggle('tree-match', matchPaths.has(li._searchPath));
+        paintRowHits(li);
       }
       return matches.length ? go(0) : summary(lastTruncated);
     },

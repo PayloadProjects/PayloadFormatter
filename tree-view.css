@@ -169,14 +169,10 @@
   background: var(--tree-focus-bg);
 }
 
-.tree-match > .tree-row { background: var(--tree-match-bg); }
-
-.tree-hit > .tree-row {
-  background: var(--tree-hit-bg);
-  box-shadow: inset 3px 0 0 var(--tree-hit-border);
-  outline: 1px solid var(--tree-hit-border);
-  outline-offset: -1px;
-}
+/* Search matches highlight the found text itself, never the whole row.
+   The current hit (li.tree-hit) gets the stronger tint. */
+.tree-hit-text { background: var(--tree-match-bg); border-radius: 3px; }
+.tree-hit .tree-hit-text { background: var(--tree-hit-bg); box-shadow: 0 0 0 1px var(--tree-hit-border); }
 
 .tree-toggle {
   width: 16px;
