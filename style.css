@@ -91,14 +91,14 @@
   --muted: #6e7a87;
 
   --panel-bg: #ffffff;
-  --panel-border: #d6dde4;
+  --panel-border: #b6c3d0;
   --strip-bg: #f7f9fb;
   --toolbar-bg: #fbfcfd;
 
   --button-bg: #ffffff;
-  --button-border: #cbd4dd;
+  --button-border: #aebcc9;
   --button-hover-bg: #f0f4f7;
-  --button-hover-border: #aebbc8;
+  --button-hover-border: #8e9fab;
   --primary-bg: #126e84;
   --primary-border: #268fab;
   --primary-hover-bg: #0d5d71;
@@ -154,7 +154,7 @@
   --divider: #d5dce3;
   --selected-bg: #e1e8ee;
   --guide: #dce3e9;
-  --shadow: 0 8px 32px rgba(20, 30, 40, .05);
+  --shadow: 0 8px 32px rgba(20, 30, 40, .12);
 
   --scroll-track: #f2f4f6;
   --scroll-thumb: #aeb8c2;
