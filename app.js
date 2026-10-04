@@ -16,6 +16,10 @@ const WINDOW_DRAFT_PREFIX = 'payload-formatter:window-draft:';
 const THEME_STORAGE_KEY = 'payload-formatter:theme:v1';
 const WRAP_STORAGE_KEY = 'payload-formatter:wrap:v1';
 const MAX_DRAFT_BYTES = 2 * 1024 * 1024;
+// Hard ceiling for a single payload: above this the tab risks an out-of-memory
+// crash (the string, its formatted copy, and worker clones add up fast).
+// Refused up front with an honest message instead of dying mid-paste.
+const HARD_MAX_PAYLOAD_CHARS = 100 * 1024 * 1024;
 const LARGE_UI_PAYLOAD_CHARS = 512 * 1024;
 const LARGE_PAYLOAD_CHARS = 2 * 1024 * 1024;
 const PREVIEW_CHARS = 120_000;
@@ -24,6 +28,7 @@ const FORMAT_TIMEOUT_PER_MB_MS = 5_000;
 const MAX_FORMAT_TIMEOUT_MS = 120_000;
 
 const editor = document.querySelector('#payloadInput');
+const editorBody = document.querySelector('.editor-body');
 const pasteFormatBtn = document.querySelector('#pasteFormatBtn');
 const copyBtn = document.querySelector('#copyBtn');
 const clearBtn = document.querySelector('#clearBtn');
@@ -113,6 +118,15 @@ editor.addEventListener('keydown', (event) => {
   }
 });
 
+// Empty panel: clicking anywhere pastes & formats from the clipboard, the
+// same flow as the Paste & Format button. Only when the panel is empty;
+// once there is a payload, clicks behave normally (focus, caret).
+editorBody?.addEventListener('click', () => {
+  if (busy || inLargeMode()) return;
+  if (getPayloadText()) return;
+  pasteAndFormatPayload();
+});
+
 editor.addEventListener('paste', (event) => {
   const text = event.clipboardData?.getData('text/plain') ?? '';
   if (!text) return;
@@ -131,8 +145,7 @@ editor.addEventListener('paste', (event) => {
   }
 
   event.preventDefault();
-  acceptPastedText(text);
-  setStatus('Pasted from clipboard.', 'success');
+  if (acceptPastedText(text)) setStatus('Pasted from clipboard.', 'success');
 });
 
 pasteFormatBtn.addEventListener('click', pasteAndFormatPayload);
@@ -570,6 +583,21 @@ function exitLargeMode() {
 }
 
 function acceptPastedText(text) {
+  // Refuse before touching the editor: admitting a >100MB payload risks an
+  // out-of-memory tab crash a moment later. The clipboard is untouched, so
+  // the user can paste a smaller slice instead. (Selection replacement can
+  // only shrink the result, so current + pasted is a safe over-estimate.)
+  // Returns false when the paste was refused.
+  const currentLength = inLargeMode() ? largeText.length : editor.value.length;
+  if (currentLength + text.length > HARD_MAX_PAYLOAD_CHARS) {
+    setStatus(
+      `That payload is too large to open (${formatCharacterCount(currentLength + text.length)}). ` +
+      'This tool handles payloads up to 100 MB.',
+      'error',
+    );
+    return false;
+  }
+
   if (inLargeMode()) {
     exitLargeMode();
     editor.value = '';
@@ -589,7 +617,7 @@ function acceptPastedText(text) {
     enterLargeMode(combined);
     refreshUiQuick(combined);
     pushHistory();
-    return;
+    return true;
   }
 
   insertAtSelectionFast(text);
@@ -597,6 +625,7 @@ function acceptPastedText(text) {
   refreshUiForInput();
   scheduleDraftSave();
   pushHistory();
+  return true;
 }
 
 async function formatPayload() {
@@ -681,6 +710,16 @@ async function pasteAndFormatPayload() {
     const text = await navigator.clipboard.readText();
     if (!text) {
       setStatus('Clipboard does not contain text.', 'error');
+      return;
+    }
+    // Check before clearing the editor: a refused paste leaves the current
+    // payload exactly as it was.
+    if (text.length > HARD_MAX_PAYLOAD_CHARS) {
+      setStatus(
+        `That payload is too large to open (${formatCharacterCount(text.length)}). ` +
+        'This tool handles payloads up to 100 MB.',
+        'error',
+      );
       return;
     }
 

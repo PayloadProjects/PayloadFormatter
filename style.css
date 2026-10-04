@@ -221,6 +221,10 @@ html[data-wrap="on"] .syntax-gutter { display: none; }
 .editor::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border: 2px solid var(--scroll-track); border-radius: 8px; }
 .editor::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); }
 .empty-state { position: absolute; top: clamp(20px, 9vh, 80px); left: 24px; right: 24px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; color: var(--muted); pointer-events: none; font-size: 13px; }
+/* The empty panel is clickable (paste & format): pointer cursor over the
+   empty editor, and the mark brightens on hover as an affordance. */
+.editor:placeholder-shown { cursor: pointer; }
+.editor-body:hover .empty-state .empty-mark { color: var(--heading); }
 .empty-state strong { color: var(--heading); font-size: 16px; font-weight: 550; }
 .empty-state small { font-size: 12px; }
 .empty-mark { font-family: Consolas, monospace; font-size: 24px; color: var(--brand-mark-text); margin-bottom: 8px; }
