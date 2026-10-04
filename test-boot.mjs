@@ -115,4 +115,41 @@ assert.equal(
   'rename commits on Enter',
 );
 
+// --- Refresh survival: a reload keeps every window's payload, name, and order ---
+// Snapshot this page's sessionStorage, then boot a brand-new page copy with it,
+// the way a real refresh replays persisted state.
+const snapshot = {};
+for (let i = 0; i < sessionStorage.length; i += 1) {
+  const key = sessionStorage.key(i);
+  snapshot[key] = sessionStorage.getItem(key);
+}
+assert.ok(snapshot['payload-formatter:windows:v1'], 'window list is persisted');
+assert.ok(snapshot['payload-formatter:window-draft:window-1'], 'window payloads are persisted');
+
+const dom2 = new JSDOM(html, { url: 'http://localhost/', pretendToBeVisual: true });
+for (const [key, value] of Object.entries(snapshot)) {
+  dom2.window.sessionStorage.setItem(key, value);
+}
+for (const key of ['window', 'document', 'sessionStorage', 'localStorage',
+  'requestAnimationFrame', 'cancelAnimationFrame', 'matchMedia', 'getComputedStyle',
+  'Node', 'Element', 'HTMLElement', 'CustomEvent', 'Event', 'KeyboardEvent',
+  'MutationObserver']) {
+  if (dom2.window[key] !== undefined) {
+    try { globalThis[key] = dom2.window[key]; } catch (_) {}
+  }
+}
+try { Object.defineProperty(globalThis, 'navigator', { value: dom2.window.navigator, configurable: true }); } catch (_) {}
+globalThis.addEventListener = dom2.window.addEventListener.bind(dom2.window);
+globalThis.removeEventListener = dom2.window.removeEventListener.bind(dom2.window);
+
+// A fresh module instance against the fresh page: the closest thing to reload.
+await import('./app.js?refresh=1');
+const doc2 = dom2.window.document;
+const tabs2 = [...doc2.querySelectorAll('.window-tab')];
+assert.equal(tabs2.length, 2, 'both windows survive the refresh');
+assert.equal(tabs2[0].querySelector('.window-tab-name').textContent, 'Orders', 'renamed tab survives');
+assert.equal(tabs2[1].querySelector('.window-tab-name').textContent, 'Window 2');
+assert.ok(tabs2[1].classList.contains('is-active'), 'the active window is restored');
+assert.equal(doc2.querySelector('#payloadInput').value, '{"x":9}', 'the active payload is restored');
+
 console.log('All boot and flow regression tests passed.');
