@@ -168,6 +168,8 @@ const [html, css, app, managerJs, build, pkg] = await Promise.all(
   assert.ok(/id="historyForwardBtn"[^>]*disabled/.test(toolbar), 'forward starts disabled');
   assert.ok(toolbar.includes('aria-label="Previous payload"'), 'back has an accessible label');
   assert.ok(toolbar.includes('aria-label="Next payload"'), 'forward has an accessible label');
+  assert.ok(/id="historyBackBtn"[^>]*><svg/.test(toolbar), 'back uses the circular-arrow icon');
+  assert.ok(/id="historyForwardBtn"[^>]*><svg/.test(toolbar), 'forward uses the circular-arrow icon');
 
   // The strict Clear -> Paste & Format -> Copy order inside .actions is untouched.
   const actions = html.match(/<div class="actions"[^>]*>([\s\S]*?)<\/div>/)?.[1];
