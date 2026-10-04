@@ -22,7 +22,7 @@ const MAX_DRAFT_BYTES = 2 * 1024 * 1024;
 // Refused up front with an honest message instead of dying mid-paste.
 const HARD_MAX_PAYLOAD_CHARS = 100 * 1024 * 1024;
 const LARGE_UI_PAYLOAD_CHARS = 512 * 1024;
-const LARGE_PAYLOAD_CHARS = 2 * 1024 * 1024;
+const LARGE_PAYLOAD_CHARS = 10 * 1024 * 1024;
 const PREVIEW_CHARS = 120_000;
 const BASE_FORMAT_TIMEOUT_MS = 30_000;
 const FORMAT_TIMEOUT_PER_MB_MS = 5_000;
