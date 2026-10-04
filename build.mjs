@@ -14,6 +14,7 @@ const files = [
   'ui-controls.js',
   'formatter-worker.js',
   'payload-detection.js',
+  'payload-history.js',
   'resilient-format.js',
   'input-normalization.js',
   'xml-format.js',

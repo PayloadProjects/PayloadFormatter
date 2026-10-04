@@ -80,8 +80,13 @@ assert.match(editorCss, /\.syntax-gutter \{[^}]*padding: 12px 8px 12px 0;/,
   'gutter padding tracks the editor padding');
 
 // Cache-busted asset versions cover every touched file.
-for (const asset of ['style.css', 'text-editor.css', 'tree-view.css', 'app.js']) {
-  assert.match(html, new RegExp(`\\./${asset.replace('.', '\\.')}\\?v=wrap-compact-v1`),
+for (const [asset, version] of [
+  ['style.css', 'history-v1'],
+  ['app.js', 'history-v1'],
+  ['text-editor.css', 'wrap-compact-v1'],
+  ['tree-view.css', 'wrap-compact-v1'],
+]) {
+  assert.match(html, new RegExp(`\\./${asset.replace('.', '\\.')}\\?v=${version}`),
     `${asset} carries the new cache-busting version`);
 }
 

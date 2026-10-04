@@ -206,6 +206,8 @@ html[data-wrap="on"] .syntax-gutter { display: none; }
 .editor:not(:placeholder-shown) ~ .empty-state { display: none; }
 .toolbar { min-height: 50px; flex: 0 0 auto; padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--panel-border); background: var(--toolbar-bg); }
 .actions { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; }
+.history-nav { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; padding-right: 10px; border-right: 1px solid var(--divider); }
+.history-nav button { min-width: 38px; padding-inline: 8px; font-size: 14px; }
 button { min-height: 34px; padding: 7px 12px; border: 1px solid var(--button-border); border-radius: 8px; background: var(--button-bg); cursor: pointer; font-size: 12px; font-weight: 600; line-height: 1.25; transition: background-color .12s ease, border-color .12s ease; }
 button:hover:not(:disabled) { border-color: var(--button-hover-border); background: var(--button-hover-bg); }
 button:focus-visible { outline: 2px solid var(--editor-focus); outline-offset: 2px; }
@@ -245,7 +247,9 @@ button.danger:hover:not(:disabled) { color: var(--danger-text); border-color: va
   .privacy-label { font-size: 11px; gap: 4px; }
   .editor-strip { padding-inline: 8px; gap: 6px; }
   .type-badge { font-size: 10px; padding: 3px 5px; }
-  .toolbar { padding: 8px; }
+  .toolbar { padding: 8px; flex-wrap: wrap; row-gap: 8px; }
+  .history-nav { padding-right: 6px; }
+  .history-nav button { min-height: 40px; }
   /* Preserve Clear -> Paste & Format -> Copy at every screen width. */
   .actions { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px; }
   .actions button { min-height: 40px; padding-inline: 10px; }

@@ -1,6 +1,7 @@
 import { detectPayloadMode } from './payload-detection.js';
 import { createTreeController } from './tree-controller.js';
 import { createSyntaxEditor } from './text-editor.js';
+import { createPayloadHistory } from './payload-history.js';
 
 const STORAGE_KEY = 'payload-formatter:draft:v1';
 const THEME_STORAGE_KEY = 'payload-formatter:theme:v1';
@@ -25,6 +26,8 @@ const themeToggleBtn = document.querySelector('#themeToggleBtn');
 const themeIcon = document.querySelector('#themeIcon');
 const themeLabel = document.querySelector('#themeLabel');
 const wrapToggleBtn = document.querySelector('#wrapToggleBtn');
+const historyBackBtn = document.querySelector('#historyBackBtn');
+const historyForwardBtn = document.querySelector('#historyForwardBtn');
 const root = document.documentElement;
 
 let busy = false;
@@ -36,8 +39,11 @@ let inputUiFrame = 0;
 let worker = null;
 let largeText = null;
 let largeFormatted = false;
+let pastePending = false;
+let historyTimer = 0;
 const pending = new Map();
 const syntaxEditor = createSyntaxEditor(editor);
+const history = createPayloadHistory();
 
 const treeController = createTreeController({
   getText: getPayloadText,
@@ -51,6 +57,7 @@ const treeController = createTreeController({
 initializeTheme();
 initializeWrap();
 restoreDraft();
+initializeHistory();
 refreshUi();
 treeController.refresh();
 
@@ -63,6 +70,15 @@ editor.addEventListener('input', () => {
       inputUiFrame = 0;
       refreshUiForInput();
       scheduleDraftSave();
+      // A native paste (not intercepted above) lands here: it is a new
+      // payload, so it gets its own history entry instead of editing the
+      // current one like ordinary typing does.
+      if (pastePending) {
+        pastePending = false;
+        pushHistory();
+      } else {
+        scheduleHistoryUpdate();
+      }
     });
   }
 });
@@ -83,7 +99,12 @@ editor.addEventListener('paste', (event) => {
     : Math.max(0, (editor.selectionEnd ?? currentLength) - (editor.selectionStart ?? currentLength));
   const nextLength = currentLength - selectedLength + text.length;
 
-  if (!inLargeMode() && nextLength < LARGE_PAYLOAD_CHARS) return;
+  if (!inLargeMode() && nextLength < LARGE_PAYLOAD_CHARS) {
+    // Small paste: let the browser insert natively, but remember it was a
+    // paste so the input handler records a new history entry for it.
+    pastePending = true;
+    return;
+  }
 
   event.preventDefault();
   acceptPastedText(text);
@@ -93,6 +114,8 @@ editor.addEventListener('paste', (event) => {
 pasteFormatBtn.addEventListener('click', pasteAndFormatPayload);
 copyBtn.addEventListener('click', copyPayload);
 clearBtn.addEventListener('click', clearPayload);
+historyBackBtn?.addEventListener('click', () => navigateHistory(-1));
+historyForwardBtn?.addEventListener('click', () => navigateHistory(1));
 themeToggleBtn?.addEventListener('click', () => {
   applyTheme(currentTheme() === 'dark' ? 'light' : 'dark', { persist: true });
 });
@@ -168,6 +191,51 @@ function applyWrap(on, { persist = false } = {}) {
 }
 
 
+function initializeHistory() {
+  const text = getPayloadText();
+  if (text) history.push(text);
+  syncHistoryNav();
+}
+
+function pushHistory() {
+  if (history.push(getPayloadText())) syncHistoryNav();
+}
+
+function scheduleHistoryUpdate() {
+  clearTimeout(historyTimer);
+  historyTimer = setTimeout(() => {
+    historyTimer = 0;
+    if (history.updateCurrent(getPayloadText())) syncHistoryNav();
+  }, 250);
+}
+
+function syncHistoryNav() {
+  if (historyBackBtn) historyBackBtn.disabled = busy || !history.canBack();
+  if (historyForwardBtn) historyForwardBtn.disabled = busy || !history.canForward();
+}
+
+function navigateHistory(direction) {
+  if (busy) return;
+  const text = direction < 0 ? history.back() : history.forward();
+  if (text === null) return;
+
+  editRevision += 1;
+  if (text.length >= LARGE_PAYLOAD_CHARS) {
+    enterLargeMode(text, { formatted: false });
+    refreshUiQuick(text);
+  } else {
+    if (inLargeMode()) exitLargeMode();
+    editor.value = text;
+    if (text.length >= LARGE_UI_PAYLOAD_CHARS) refreshUiQuick(text);
+    else refreshUi();
+  }
+  saveDraftNow();
+  syncHistoryNav();
+  treeController.refresh();
+  setStatus(direction < 0 ? 'Restored previous payload.' : 'Restored next payload.', 'success');
+}
+
+
 function inLargeMode() {
   return largeText !== null;
 }
@@ -232,6 +300,7 @@ function acceptPastedText(text) {
     editRevision += 1;
     enterLargeMode(combined);
     refreshUiQuick(combined);
+    pushHistory();
     return;
   }
 
@@ -239,6 +308,7 @@ function acceptPastedText(text) {
   editRevision += 1;
   refreshUiForInput();
   scheduleDraftSave();
+  pushHistory();
 }
 
 async function formatPayload() {
@@ -295,6 +365,9 @@ async function formatCurrentPayload() {
       }
     }
     saveDraftNow();
+    // Formatting rewrites the payload in place: keep it on the current
+    // history entry instead of recording a second entry per paste.
+    if (history.updateCurrent(getPayloadText())) syncHistoryNav();
     await treeController.refresh();
 
     if (result.bestEffort) {
@@ -415,6 +488,7 @@ function clearPayload() {
   editor.value = '';
   editRevision += 1;
   clearStoredDraft();
+  pushHistory();
   refreshUi();
   treeController.refresh();
   setStatus('Cleared.', 'success');
@@ -620,6 +694,7 @@ function setBusy(value) {
   pasteFormatBtn.disabled = value;
   clearBtn.disabled = value;
   syncActionButtons();
+  syncHistoryNav();
 }
 
 function syncActionButtons() {

@@ -30,7 +30,7 @@
       })();
     </script>
     <title>JSON/XML Formatter</title>
-    <link rel="stylesheet" href="./style.css?v=wrap-compact-v1" />
+    <link rel="stylesheet" href="./style.css?v=history-v1" />
     <link rel="stylesheet" href="./tree-view.css?v=wrap-compact-v1" />
     <link rel="stylesheet" href="./text-editor.css?v=wrap-compact-v1" />
   </head>
@@ -135,6 +135,11 @@
         </div>
 
         <div class="toolbar">
+          <div class="history-nav" role="group" aria-label="Payload history">
+            <button id="historyBackBtn" type="button" title="Previous payload" aria-label="Previous payload" disabled>←</button>
+            <button id="historyForwardBtn" type="button" title="Next payload" aria-label="Next payload" disabled>→</button>
+          </div>
+
           <div class="actions" role="group" aria-label="Formatting actions">
             <button id="clearBtn" class="danger" type="button">Clear</button>
             <button id="pasteFormatBtn" class="primary" type="button" title="Paste from clipboard and format. Ctrl/Cmd + Enter to format the current payload.">
@@ -155,7 +160,7 @@
       </section>
     </main>
 
-    <script type="module" src="./app.js?v=wrap-compact-v1"></script>
+    <script type="module" src="./app.js?v=history-v1"></script>
     <script type="module" src="./ui-controls.js?v=tree-actions-visible-v1"></script>
   </body>
 </html>
