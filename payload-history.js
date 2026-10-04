@@ -12,6 +12,9 @@ const DEFAULT_MAX_BYTES = 8 * 1024 * 1024;
 export function createPayloadHistory({ maxEntries = DEFAULT_MAX_ENTRIES, maxBytes = DEFAULT_MAX_BYTES } = {}) {
   let entries = [];
   let index = -1;
+  // Bumps on every mutation so async hydration can tell whether the
+  // in-memory history changed while it was loading from storage.
+  let revision = 0;
 
   function totalBytes() {
     let total = 0;
@@ -37,6 +40,7 @@ export function createPayloadHistory({ maxEntries = DEFAULT_MAX_ENTRIES, maxByte
     entries.push(text);
     index = entries.length - 1;
     evict();
+    revision += 1;
     return true;
   }
 
@@ -50,6 +54,7 @@ export function createPayloadHistory({ maxEntries = DEFAULT_MAX_ENTRIES, maxByte
     entries = entries.slice(0, index + 1);
     entries[index] = text;
     evict();
+    revision += 1;
     return true;
   }
 
@@ -87,5 +92,43 @@ export function createPayloadHistory({ maxEntries = DEFAULT_MAX_ENTRIES, maxByte
     canForward: () => nearestPayload(index, 1) >= 0,
     current: () => (index >= 0 ? entries[index] : ''),
     size: () => entries.length,
+    revision: () => revision,
+    toJSON: () => ({ entries: entries.slice(), index }),
+    // Rebuilds the history from a persisted snapshot; tolerant of bad data.
+    restore(data) {
+      if (!data || !Array.isArray(data.entries)) return false;
+      entries = data.entries.map((entry) => String(entry ?? ''));
+      index = entries.length === 0
+        ? -1
+        : Math.min(Math.max(Number.isInteger(data.index) ? data.index : entries.length - 1, 0), entries.length - 1);
+      evict();
+      revision += 1;
+      return true;
+    },
+    // Snapshot for persistence. Entries the predicate rejects (oversize
+    // payloads: large payloads are never persisted, matching the draft rule)
+    // are dropped; the index is remapped to the nearest surviving entry at
+    // or before the old position.
+    toPersistable(isPersistable) {
+      const kept = [];
+      const remap = new Array(entries.length).fill(-1);
+      for (let i = 0; i < entries.length; i += 1) {
+        if (isPersistable(entries[i])) {
+          remap[i] = kept.length;
+          kept.push(entries[i]);
+        }
+      }
+      let nextIndex = -1;
+      if (kept.length > 0) {
+        nextIndex = remap[index];
+        if (nextIndex < 0) {
+          nextIndex = 0;
+          for (let i = 0; i < entries.length && i < index; i += 1) {
+            if (remap[i] >= 0) nextIndex = remap[i];
+          }
+        }
+      }
+      return { entries: kept, index: nextIndex };
+    },
   };
 }

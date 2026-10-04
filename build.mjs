@@ -15,6 +15,7 @@ const files = [
   'formatter-worker.js',
   'payload-detection.js',
   'payload-history.js',
+  'history-store.js',
   'resilient-format.js',
   'window-manager.js',
   'input-normalization.js',

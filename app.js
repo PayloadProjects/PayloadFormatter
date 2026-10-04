@@ -2,6 +2,13 @@ import { detectPayloadMode } from './payload-detection.js';
 import { createTreeController } from './tree-controller.js';
 import { createSyntaxEditor } from './text-editor.js';
 import { createWindowManager, MAX_WINDOWS } from './window-manager.js';
+import {
+  getTabId,
+  saveWindowHistory,
+  loadWindowHistories,
+  deleteWindowHistory,
+  cleanupStaleHistories,
+} from './history-store.js';
 
 const STORAGE_KEY = 'payload-formatter:draft:v1';
 const WINDOWS_KEY = 'payload-formatter:windows:v1';
@@ -45,6 +52,12 @@ let largeText = null;
 let largeFormatted = false;
 let pastePending = false;
 let historyTimer = 0;
+// In-flight history persistence writes, so tests (and only tests) can await
+// them. Production code fires these writes and never waits.
+const pendingHistorySaves = new Set();
+// One id per tab, stable across refresh: history records are keyed by it so
+// two tabs never share paste history, mirroring the sessionStorage drafts.
+const tabId = getTabId();
 const pending = new Map();
 const syntaxEditor = createSyntaxEditor(editor);
 const windowManager = createWindowManager();
@@ -65,6 +78,10 @@ const treeController = createTreeController({
 initializeTheme();
 initializeWrap();
 restoreWindows();
+// History arrives asynchronously from IndexedDB; the windows above boot
+// synchronously from sessionStorage so the UI is never blocked on it.
+hydrateWindowHistories();
+cleanupStaleHistories();
 refreshUi();
 treeController.refresh();
 
@@ -284,6 +301,52 @@ function persistPayloadFor(win, text, isLarge) {
   writeWindowDraft(win.id, text);
 }
 
+// Persists one window's paste history (entries + position) to IndexedDB.
+// Fire-and-forget: a storage failure degrades to session-only history and
+// never risks the visible payload. Oversize entries are dropped, matching
+// the rule that large payloads are never persisted.
+function saveHistoryFor(win) {
+  if (!win || !win.history) return;
+  const snapshot = win.history.toPersistable(
+    (text) => text.length <= MAX_DRAFT_BYTES && utf8ByteLength(text) <= MAX_DRAFT_BYTES,
+  );
+  const task = saveWindowHistory(tabId, win.id, snapshot);
+  pendingHistorySaves.add(task);
+  const done = () => pendingHistorySaves.delete(task);
+  task.then(done, done);
+}
+
+// Async companion to restoreWindows: loads every window's paste history and
+// swaps it in. The boot already seeded each window with its latest draft, so
+// hydration only replaces the seeded state when nothing newer happened while
+// it was loading — a paste during hydration wins and is re-saved instead of
+// being clobbered.
+let resolveHistoryHydrated = null;
+const historyHydrated = new Promise((resolve) => {
+  resolveHistoryHydrated = resolve;
+});
+
+async function hydrateWindowHistories() {
+  try {
+    const revisions = new Map(
+      windowManager.windows.map((win) => [win.id, win.history.revision()]),
+    );
+    const records = await loadWindowHistories(tabId);
+    for (const record of records) {
+      const win = windowManager.getWindow(record.windowId);
+      if (!win) continue;
+      if (win.history.revision() !== revisions.get(win.id)) {
+        saveHistoryFor(win);
+        continue;
+      }
+      win.history.restore(record);
+    }
+    syncHistoryNav();
+  } finally {
+    resolveHistoryHydrated();
+  }
+}
+
 function activateWindow(id, { stash = true } = {}) {
   const next = windowManager.getWindow(id);
   if (!next || busy) return;
@@ -327,6 +390,8 @@ function closeWindowById(id) {
     return;
   }
   clearWindowDraft(target.id);
+  // Drop its persisted history too: closing a window forgets its datasets.
+  deleteWindowHistory(tabId, target.id);
   persistWindowList();
   // The payload was already stashed above; switch without stashing again.
   if (wasActive) activateWindow(result.activateId, { stash: false });
@@ -408,14 +473,20 @@ function startRename(tabEl) {
 }
 
 function pushHistory() {
-  if (history.push(getPayloadText())) syncHistoryNav();
+  if (history.push(getPayloadText())) {
+    syncHistoryNav();
+    saveHistoryFor(activeWindow);
+  }
 }
 
 function scheduleHistoryUpdate() {
   clearTimeout(historyTimer);
   historyTimer = setTimeout(() => {
     historyTimer = 0;
-    if (history.updateCurrent(getPayloadText())) syncHistoryNav();
+    if (history.updateCurrent(getPayloadText())) {
+      syncHistoryNav();
+      saveHistoryFor(activeWindow);
+    }
   }, 250);
 }
 
@@ -447,6 +518,8 @@ function navigateHistory(direction) {
   if (text === null) return;
   setPayloadText(text);
   syncHistoryNav();
+  // The position in history changed; persist it so a refresh restores it.
+  saveHistoryFor(activeWindow);
   setStatus(direction < 0 ? 'Restored previous payload.' : 'Restored next payload.', 'success');
 }
 
@@ -970,4 +1043,18 @@ function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 ** 2).toFixed(2)} MB`;
+}
+
+// Test hooks (not part of the UI contract): let the regression suite await
+// asynchronous history persistence without racing it.
+export function __flushHistorySaves() {
+  return Promise.all([...pendingHistorySaves]);
+}
+
+export function __historyHydrated() {
+  return historyHydrated;
+}
+
+export function __getTabId() {
+  return tabId;
 }
