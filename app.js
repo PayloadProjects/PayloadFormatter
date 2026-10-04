@@ -2,6 +2,7 @@ import { detectPayloadMode } from './payload-detection.js';
 import { createTreeController } from './tree-controller.js';
 import { createSyntaxEditor } from './text-editor.js';
 import { createWindowManager, MAX_WINDOWS } from './window-manager.js';
+import { initEpochPopover } from './epoch-popover.js';
 import {
   getTabId,
   saveWindowHistory,
@@ -82,6 +83,7 @@ const treeController = createTreeController({
 
 initializeTheme();
 initializeWrap();
+initEpochPopover();
 restoreWindows();
 // History arrives asynchronously from IndexedDB; the windows above boot
 // synchronously from sessionStorage so the UI is never blocked on it.
