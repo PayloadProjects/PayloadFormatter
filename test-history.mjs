@@ -85,7 +85,47 @@ const [html, css, app, build, pkg] = await Promise.all(
   assert.equal(history.canForward(), false);
 }
 
+// --- Model: clearing between pastes does not trap back/forward on empty ---
+{
+  const history = createPayloadHistory();
+  history.push('{"a":1}'); // paste A
+  history.push('');        // clear
+  history.push('{"b":2}'); // paste B
+  assert.equal(history.canBack(), true);
+  assert.equal(history.back(), '{"a":1}', 'back skips the empty clear state');
+  assert.equal(history.canBack(), false);
+  assert.equal(history.canForward(), true);
+  assert.equal(history.forward(), '{"b":2}', 'forward skips the empty clear state');
+  assert.equal(history.canForward(), false);
+}
+
+// --- Model: back after an accidental clear restores the payload ---
+{
+  const history = createPayloadHistory();
+  history.push('{"a":1}');
+  history.push('');
+  assert.equal(history.canBack(), true);
+  assert.equal(history.back(), '{"a":1}');
+  assert.equal(history.canForward(), false, 'nothing navigable past the trailing clear state');
+}
+
+// --- Model: consecutive clears record a single empty state ---
+{
+  const history = createPayloadHistory();
+  history.push('{"a":1}');
+  assert.equal(history.push(''), true);
+  assert.equal(history.push(''), false, 'duplicate empty state is a no-op');
+  assert.equal(history.size(), 2);
+  assert.equal(history.back(), '{"a":1}');
+}
+
 // --- Model: updateCurrent on an empty history records the first entry ---
+{
+  const history = createPayloadHistory();
+  assert.equal(history.updateCurrent('typed'), true);
+  assert.equal(history.size(), 1);
+  assert.equal(history.current(), 'typed');
+}
 {
   const history = createPayloadHistory();
   assert.equal(history.updateCurrent('typed'), true);

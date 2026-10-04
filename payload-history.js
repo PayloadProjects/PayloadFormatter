@@ -2,6 +2,9 @@
 // Pure model, no DOM: entries are payload states, one per paste (or clear).
 // In-place edits (typing, formatting) update the current entry instead of
 // pushing, so Back/Forward moves between pastes, not keystrokes.
+// Clearing records the empty state so an accidental clear is recoverable,
+// but navigation skips empty entries: Back/Forward always lands on a real
+// pasted payload, never on the blank left behind by a clear.
 // Session-only by design: the draft already persists the latest payload.
 const DEFAULT_MAX_ENTRIES = 25;
 const DEFAULT_MAX_BYTES = 8 * 1024 * 1024;
@@ -51,15 +54,28 @@ export function createPayloadHistory({ maxEntries = DEFAULT_MAX_ENTRIES, maxByte
   }
 
   function back() {
-    if (index <= 0) return null;
-    index -= 1;
+    const target = nearestPayload(index, -1);
+    if (target < 0) return null;
+    index = target;
     return entries[index];
   }
 
   function forward() {
-    if (index < 0 || index >= entries.length - 1) return null;
-    index += 1;
+    const target = nearestPayload(index, 1);
+    if (target < 0) return null;
+    index = target;
     return entries[index];
+  }
+
+  // Empty entries (left behind by Clear) are not navigation stops: find the
+  // nearest non-empty payload in the given direction, or -1 when none.
+  function nearestPayload(from, step) {
+    let cursor = from;
+    while (true) {
+      cursor += step;
+      if (cursor < 0 || cursor >= entries.length) return -1;
+      if (entries[cursor] !== '') return cursor;
+    }
   }
 
   return {
@@ -67,8 +83,8 @@ export function createPayloadHistory({ maxEntries = DEFAULT_MAX_ENTRIES, maxByte
     updateCurrent,
     back,
     forward,
-    canBack: () => index > 0,
-    canForward: () => index >= 0 && index < entries.length - 1,
+    canBack: () => nearestPayload(index, -1) >= 0,
+    canForward: () => nearestPayload(index, 1) >= 0,
     current: () => (index >= 0 ? entries[index] : ''),
     size: () => entries.length,
   };
