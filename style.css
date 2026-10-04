@@ -172,15 +172,15 @@ button { color: inherit; }
 .topbar { min-height: 32px; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .brand, .header-tools { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .brand-copy { min-width: 0; }
-.brand-mark { width: 26px; height: 26px; flex: 0 0 26px; display: grid; place-items: center; border: 1px solid var(--brand-mark-border); border-radius: 6px; background: var(--brand-mark-bg); color: var(--brand-mark-text); font-family: Consolas, monospace; font-size: 11px; font-weight: 700; }
+.brand-mark { width: 26px; height: 26px; flex: 0 0 26px; display: grid; place-items: center; border: 1px solid var(--brand-mark-border); border-radius: 7px; background: var(--brand-mark-bg); color: var(--brand-mark-text); font-family: Consolas, monospace; font-size: 11px; font-weight: 700; }
 h1 { margin: 0; color: var(--heading); font-size: 15px; line-height: 1.25; font-weight: 650; letter-spacing: -.025em; }
 .privacy-label { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; white-space: nowrap; }
 .privacy-dot { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: var(--local-dot); }
 .workspace { display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1; }
-.editor-frame { min-height: 0; min-width: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--panel-border); border-radius: 8px; background: var(--panel-bg); box-shadow: var(--shadow); }
+.editor-frame { min-height: 0; min-width: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--panel-border); border-radius: 12px; background: var(--panel-bg); box-shadow: var(--shadow); }
 .editor-strip { min-height: 40px; flex: 0 0 auto; padding: 5px 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--panel-border); background: var(--strip-bg); }
 .editor-strip-meta { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.strip-btn { min-height: 28px; padding: 4px 12px; border: 1px solid var(--panel-border); border-radius: 6px; background: var(--editor-bg); color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; }
+.strip-btn { min-height: 28px; padding: 4px 12px; border: 1px solid var(--panel-border); border-radius: 8px; background: var(--editor-bg); color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; }
 .strip-btn:hover { background: var(--button-hover-bg); color: var(--text); }
 .strip-btn[aria-pressed="true"] { background: var(--selected-bg); color: var(--heading); border-color: var(--brand-mark-border); }
 /* Word wrap: the native editor wraps; the overlay mirror maps one source line
@@ -188,7 +188,7 @@ h1 { margin: 0; color: var(--heading); font-size: 15px; line-height: 1.25; font-
 html[data-wrap="on"] .text-editor { --gutter-width: 0px; }
 html[data-wrap="on"] .text-editor .editor { white-space: pre-wrap; overflow-wrap: anywhere; }
 html[data-wrap="on"] .syntax-gutter { display: none; }
-.type-badge { padding: 3px 8px; border: 1px solid var(--badge-border); border-radius: 4px; background: var(--badge-bg); color: var(--badge-text); font-size: 11px; font-weight: 600; line-height: 1.3; white-space: nowrap; }
+.type-badge { padding: 3px 8px; border: 1px solid var(--badge-border); border-radius: 6px; background: var(--badge-bg); color: var(--badge-text); font-size: 11px; font-weight: 600; line-height: 1.3; white-space: nowrap; }
 .type-badge.json { border-color: var(--json-border); background: var(--json-bg); color: var(--json-text); }
 .type-badge.xml { border-color: var(--xml-border); background: var(--xml-bg); color: var(--xml-text); }
 .editor-body { background: var(--editor-bg); position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
@@ -208,7 +208,7 @@ html[data-wrap="on"] .syntax-gutter { display: none; }
 .actions { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; }
 .history-nav { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; padding-right: 10px; border-right: 1px solid var(--divider); }
 .history-nav button { min-width: 38px; padding-inline: 8px; font-size: 14px; }
-button { min-height: 34px; padding: 7px 12px; border: 1px solid var(--button-border); border-radius: 6px; background: var(--button-bg); cursor: pointer; font-size: 12px; font-weight: 600; line-height: 1.25; transition: background-color .12s ease, border-color .12s ease; }
+button { min-height: 34px; padding: 7px 12px; border: 1px solid var(--button-border); border-radius: 8px; background: var(--button-bg); cursor: pointer; font-size: 12px; font-weight: 600; line-height: 1.25; transition: background-color .12s ease, border-color .12s ease; }
 button:hover:not(:disabled) { border-color: var(--button-hover-border); background: var(--button-hover-bg); }
 button:focus-visible { outline: 2px solid var(--editor-focus); outline-offset: 2px; }
 button:disabled { opacity: .5; cursor: default; }
@@ -226,7 +226,7 @@ button.danger:hover:not(:disabled) { color: var(--danger-text); border-color: va
 #statusText.error { color: var(--error); }
 #statusText.success { color: var(--success); }
 #statusText.warning { color: var(--warning); }
-.large-notice { flex: 0 0 auto; align-self: flex-start; max-width: calc(100% - 24px); margin: 8px 12px 0; padding: 5px 8px; border: 1px solid var(--panel-border); border-radius: 4px; background: var(--strip-bg); color: var(--muted); font-size: 11px; line-height: 1.4; }
+.large-notice { flex: 0 0 auto; align-self: flex-start; max-width: calc(100% - 24px); margin: 8px 12px 0; padding: 5px 8px; border: 1px solid var(--panel-border); border-radius: 6px; background: var(--strip-bg); color: var(--muted); font-size: 11px; line-height: 1.4; }
 .editor.large-mode { cursor: default; }
 .button-spinner { display: none; width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; }
 .busy .button-spinner { display: inline-block; animation: spinner-turn .8s linear infinite; }
