@@ -88,7 +88,7 @@
   --page-glow: rgba(42, 142, 170, .08);
   --text: #25303b;
   --heading: #17212b;
-  --muted: #6e7a87;
+  --muted: #656d76;
 
   --panel-bg: #ffffff;
   --panel-border: #b6c3d0;
@@ -151,7 +151,7 @@
   --local-text: #58766e;
   --local-dot: #2f9d6c;
   --note-text: #7b8793;
-  --divider: #d5dce3;
+  --divider: #c9d2db;
   --selected-bg: #e1e8ee;
   --guide: #dce3e9;
   --shadow: 0 8px 32px rgba(20, 30, 40, .12);
@@ -196,7 +196,7 @@ button { color: inherit; }
 .epoch-error[hidden] { display: none; }
 .epoch-outputs { display: flex; flex-direction: column; border: 1px solid var(--panel-border); border-radius: 8px; overflow: hidden; }
 .epoch-output { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--strip-bg); }
-.epoch-output + .epoch-output { border-top: 1px solid var(--panel-border); }
+.epoch-output + .epoch-output { border-top: 1px solid var(--divider); }
 .epoch-output-label { flex: 0 0 64px; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .epoch-output-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-family: Consolas, monospace; color: var(--text); }
 .epoch-output-value:empty::before { content: '—'; color: var(--muted); }
