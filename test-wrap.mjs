@@ -70,8 +70,8 @@ assert.match(css, /\.brand-mark \{ width: 22px; height: 22px;/, 'brand mark is s
 assert.match(css, /h1 \{[^}]*font-size: 15px;/, 'heading is smaller');
 assert.match(css, /\.editor-strip \{ min-height: 28px;[^}]*padding: 2px 10px;/,
   'editor strip is slimmer');
-assert.match(css, /\.toolbar \{ min-height: 38px;[^}]*padding: 4px 10px;/,
-  'toolbar is slimmer');
+assert.match(css, /\.toolbar \{ min-height: 28px;[^}]*padding: 2px 10px;/,
+  'toolbar matches the strip');
 assert.match(treeCss, /\.tree-search \{[^}]*height: 24px;/,
   'tree search input matches the slimmer strip');
 // The mirror overlay paddings must track the editor padding exactly.
