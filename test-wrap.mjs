@@ -68,10 +68,12 @@ assert.match(css, /\.shell \{[^}]*padding: 8px 12px 10px;[^}]*gap: 8px;/,
 assert.match(css, /\.topbar \{ min-height: 32px;/, 'topbar is slimmer');
 assert.match(css, /\.brand-mark \{ width: 26px; height: 26px;/, 'brand mark is smaller');
 assert.match(css, /h1 \{[^}]*font-size: 15px;/, 'heading is smaller');
-assert.match(css, /\.editor-strip \{ min-height: 40px;[^}]*padding: 5px 10px;/,
+assert.match(css, /\.editor-strip \{ min-height: 34px;[^}]*padding: 3px 10px;/,
   'editor strip is slimmer');
-assert.match(css, /\.toolbar \{ min-height: 50px;[^}]*padding: 8px 10px;/,
+assert.match(css, /\.toolbar \{ min-height: 44px;[^}]*padding: 5px 10px;/,
   'toolbar is slimmer');
+assert.match(treeCss, /\.tree-search \{[^}]*height: 28px;/,
+  'tree search input matches the slimmer strip');
 // The mirror overlay paddings must track the editor padding exactly.
 assert.match(css, /\.editor \{[^}]*padding: 12px;/, 'editor padding is compact');
 assert.match(editorCss, /\.syntax-mirror \{[^}]*padding: 12px 12px 12px calc\(var\(--gutter-width\) \+ 12px\);/,
