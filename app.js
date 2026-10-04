@@ -520,12 +520,12 @@ function scheduleHistoryUpdate() {
 // Extracted so window switches can flush it synchronously: otherwise a fast
 // switch lets the timer fire against the NEW window and the old window's
 // history never learns the typed text.
+// Typing records a NEW entry per pause (not an in-place rewrite), so Back
+// steps through edits: [A, B, B-edit1, B-edit2] -> Back -> B-edit1 -> B -> A.
+// push() ignores consecutive duplicates, so idle debounce fires are no-ops.
 function applyHistoryUpdate() {
   if (!activeWindow || !history) return;
-  if (history.updateCurrent(getPayloadText())) {
-    syncHistoryNav();
-    saveHistoryFor(activeWindow);
-  }
+  pushHistory();
 }
 
 function syncHistoryNav() {

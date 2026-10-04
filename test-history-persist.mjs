@@ -454,13 +454,19 @@ __clearMemoryBackend();
   assert.equal(back.disabled, false, 'history survives the fast switch');
   back.click();
   await sleep(50);
-  assert.equal(editor.value, '{"a":1}', 'back reaches the first payload');
+  assert.equal(editor.value, '{"b":2}', 'back steps to the pre-edit entry');
+  back.click();
+  await sleep(50);
+  assert.equal(editor.value, '{"a":1}', 'back again reaches the first payload');
+  forward.click();
+  await sleep(50);
+  assert.equal(editor.value, '{"b":2}', 'forward steps back through the edits');
   forward.click();
   await sleep(50);
   assert.equal(
     editor.value,
     '{"b":2,"typed":true}',
-    'forward reaches the typed text: the debounce updated Window 1, not Window 2',
+    'forward reaches the typed text: the debounce pushed to Window 1, not Window 2',
   );
 
   // And Window 2's persisted history was never polluted by Window 1's typing.
