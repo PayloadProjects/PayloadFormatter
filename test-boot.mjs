@@ -125,6 +125,8 @@ for (let i = 0; i < sessionStorage.length; i += 1) {
 }
 assert.ok(snapshot['payload-formatter:windows:v1'], 'window list is persisted');
 assert.ok(snapshot['payload-formatter:window-draft:window-1'], 'window payloads are persisted');
+assert.equal(snapshot['payload-formatter:draft:v1'], '{"x":9}',
+  'legacy key mirrors the active payload so pre-window builds keep working');
 
 const dom2 = new JSDOM(html, { url: 'http://localhost/', pretendToBeVisual: true });
 for (const [key, value] of Object.entries(snapshot)) {

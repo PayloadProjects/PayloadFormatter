@@ -229,11 +229,11 @@ function restoreWindows() {
     }
   }
   if (!restored) {
-    // First run with windows (or a fresh tab): migrate the legacy single draft
-    // into the first window so existing users lose nothing.
+    // First run with windows (or a fresh tab): seed the first window from the
+    // legacy single draft when present. The legacy key is left alone so older
+    // builds keep working if the user switches back.
     let legacy = null;
     try { legacy = sessionStorage.getItem(STORAGE_KEY); } catch (_) {}
-    try { sessionStorage.removeItem(STORAGE_KEY); } catch (_) {}
     windowManager.newWindow('', legacy || '');
     if (legacy) setStatus('Restored this tab’s draft.', 'success');
   }
@@ -783,7 +783,19 @@ function saveDraftNow() {
   if (!activeWindow) return;
   // The debounced keystroke path, formatting, and window switches all funnel
   // here: persist the visible payload into the active window's draft slot.
-  persistPayloadFor(activeWindow, getPayloadText(), inLargeMode());
+  const text = getPayloadText();
+  const large = inLargeMode();
+  persistPayloadFor(activeWindow, text, large);
+  // Dual-write the legacy single-draft key: builds without windows (main)
+  // restore the last active payload from it, so switching branches or builds
+  // never strands the draft.
+  try {
+    if (!large && text && text.length <= MAX_DRAFT_BYTES && utf8ByteLength(text) <= MAX_DRAFT_BYTES) {
+      sessionStorage.setItem(STORAGE_KEY, text);
+    } else {
+      sessionStorage.removeItem(STORAGE_KEY);
+    }
+  } catch (_) {}
 }
 
 function clearStoredDraft() {

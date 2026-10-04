@@ -149,6 +149,9 @@ const [html, css, app, build, pkg] = await Promise.all(
   assert.ok(app.includes('WINDOW_DRAFT_PREFIX'), 'drafts are namespaced per window');
   assert.ok(app.includes('payload-formatter:windows:v1'), 'window list is persisted');
   assert.ok(app.includes('STORAGE_KEY'), 'legacy draft key is still migrated');
+  const restore = app.match(/function restoreWindows\(\) \{([\s\S]*?)\n\}\n\nfunction persistWindowList/)?.[1];
+  assert.ok(restore && !restore.includes('removeItem(STORAGE_KEY)'),
+    'the first-run migration never deletes the legacy key');
   assert.ok(app.includes('setPayloadText(next.payload'), 'switching swaps the payload');
   assert.ok(app.includes('dblclick'), 'rename starts on double-click');
 }
