@@ -663,8 +663,13 @@ export function createTreeView(container, { onCopyPath } = {}) {
       current = -1;
       lastTruncated = false;
       matchPaths.clear();
-      for (const li of container.querySelectorAll('.tree-match')) li.classList.remove('tree-match');
       needles = searchNeedles(query);
+      // Unmark previous results first: with empty needles paintRowHits unwraps,
+      // so clearing the query cannot leave stale highlight spans behind.
+      for (const li of container.querySelectorAll('.tree-node')) {
+        li.classList.remove('tree-match');
+        paintRowHits(li);
+      }
       if (!needles.length || !root) return summary();
 
       if (nodeMatches(root, needles)) matches.push([]);
