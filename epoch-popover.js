@@ -56,6 +56,7 @@ export function initEpochPopover() {
   const input = popover.querySelector('#epochInput');
   const unitSelect = popover.querySelector('#epochUnitSelect');
   const nowBtn = popover.querySelector('#epochNowBtn');
+  const liveBtn = popover.querySelector('#epochLiveBtn');
   const detected = popover.querySelector('#epochDetected');
   const error = popover.querySelector('#epochError');
   const dateInput = popover.querySelector('#epochDateInput');
@@ -64,6 +65,31 @@ export function initEpochPopover() {
 
   // Every row that convert() can fill; cleared together on empty input or error.
   const OUTPUT_ROWS = ['utc', 'local', 'relative', 'unit-s', 'unit-ms', 'unit-us', 'unit-ns'];
+
+  // Live mode: re-timestamps the input every second until the user types,
+  // switches tab, or closes the popover.
+  let liveTimer = null;
+  const currentUnit = () =>
+    unitSelect.value === 'auto' ? detectUnit(String(Date.now())) || 'ms' : unitSelect.value;
+  const tickLive = () => {
+    input.value = dateToUnitStrings(new Date(), currentUnit());
+    convert();
+  };
+  const paintLive = () => {
+    const on = liveTimer !== null;
+    liveBtn.classList.toggle('is-active', on);
+    liveBtn.setAttribute('aria-pressed', String(on));
+  };
+  const setLive = (on) => {
+    if (on && !liveTimer) {
+      tickLive();
+      liveTimer = setInterval(tickLive, 1000);
+    } else if (!on && liveTimer) {
+      clearInterval(liveTimer);
+      liveTimer = null;
+    }
+    paintLive();
+  };
 
   const showError = (message) => {
     error.textContent = message || '';
@@ -134,6 +160,7 @@ export function initEpochPopover() {
   };
 
   const selectTab = (toDate) => {
+    if (!toDate) setLive(false);
     tabToDate.setAttribute('aria-selected', String(toDate));
     tabToEpoch.setAttribute('aria-selected', String(!toDate));
     tabToDate.classList.toggle('is-active', toDate);
@@ -144,6 +171,7 @@ export function initEpochPopover() {
 
   const close = (refocus = true) => {
     if (popover.hidden) return;
+    setLive(false);
     popover.hidden = true;
     button.setAttribute('aria-expanded', 'false');
     document.removeEventListener('pointerdown', onOutside, true);
@@ -177,16 +205,25 @@ export function initEpochPopover() {
   });
   tabToDate.addEventListener('click', () => selectTab(true));
   tabToEpoch.addEventListener('click', () => selectTab(false));
-  input.addEventListener('input', convert);
-  unitSelect.addEventListener('change', convert);
+  input.addEventListener('input', () => {
+    // Typing by hand takes over from live mode; programmatic ticks don't
+    // fire input events, so this only triggers on real keystrokes/pastes.
+    setLive(false);
+    convert();
+  });
+  unitSelect.addEventListener('change', () => {
+    if (liveTimer) tickLive();
+    else convert();
+  });
   dateInput.addEventListener('input', convertDate);
   targetUnit.addEventListener('change', convertDate);
   nowBtn.addEventListener('click', () => {
-    const unit = unitSelect.value === 'auto' ? detectUnit(String(Date.now())) || 'ms' : unitSelect.value;
-    input.value = dateToUnitStrings(new Date(), unit);
+    setLive(false);
+    input.value = dateToUnitStrings(new Date(), currentUnit());
     convert();
     input.focus();
   });
+  liveBtn.addEventListener('click', () => setLive(liveTimer === null));
 
   selectTab(true);
 }

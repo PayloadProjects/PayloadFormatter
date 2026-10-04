@@ -192,6 +192,46 @@ doc.querySelector('[data-epoch-copy="unit-ns"]').click();
 await sleep(50);
 assert.equal(copied, '1728000000000000000', 'nanos row copies just nanoseconds');
 
+// Live mode: keeps itself on the current time without clicking Now.
+const liveBtn = q('#epochLiveBtn');
+assert.ok(liveBtn, 'Live toggle exists');
+assert.equal(liveBtn.getAttribute('aria-pressed'), 'false', 'live starts off');
+liveBtn.click();
+await sleep(50);
+assert.equal(liveBtn.getAttribute('aria-pressed'), 'true', 'live engages');
+assert.ok(liveBtn.classList.contains('is-active'), 'live shows its active state');
+const firstTick = input.value;
+assert.ok(/^\d{13}$/.test(firstTick), 'live fills the current milliseconds');
+assert.ok(doc.querySelector('[data-epoch-value="utc"]').textContent.endsWith('Z'), 'live converts');
+await sleep(1200);
+assert.notEqual(input.value, firstTick, 'live ticks forward on its own');
+
+// Typing by hand takes over from live mode.
+input.value = '1728000000';
+input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+await sleep(50);
+assert.equal(liveBtn.getAttribute('aria-pressed'), 'false', 'manual typing stops live');
+assert.equal(input.value, '1728000000', 'typed value is preserved');
+
+// Closing the popover stops the timer.
+liveBtn.click();
+await sleep(50);
+const liveValue = input.value;
+assert.equal(liveBtn.getAttribute('aria-pressed'), 'true', 'live re-engaged');
+doc.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+await sleep(1300);
+button.click();
+await sleep(50);
+assert.equal(input.value, liveValue, 'no ticks happen while closed');
+assert.equal(liveBtn.getAttribute('aria-pressed'), 'false', 'live is off after close');
+
+// Switching to the Date → Epoch tab stops live mode.
+liveBtn.click();
+await sleep(50);
+q('#epochTabToEpoch').click();
+await sleep(50);
+assert.equal(liveBtn.getAttribute('aria-pressed'), 'false', 'tab switch stops live');
+
 // Date → Epoch tab.
 q('#epochTabToEpoch').click();
 await sleep(50);
