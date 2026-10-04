@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "test": "node test.mjs && node test-theme.mjs && node test-large-paste.mjs && node test-reliability.mjs && node test-favicon.mjs && node test-large-format.mjs && node test-large-mode.mjs && node test-paste-format.mjs && node test-tree-view.mjs && node test-ui-cleanup.mjs && node test-editor-contrast.mjs && node test-syntax.mjs && node test-wrap.mjs && node test-tree-dom.mjs && node test-history.mjs && node test-history-persist.mjs && node test-stress-guards.mjs && node test-boot.mjs && node test-windows.mjs && node test-epoch.mjs && node test-hardening.mjs",
+    "test": "node test.mjs && node test-theme.mjs && node test-large-paste.mjs && node test-reliability.mjs && node test-favicon.mjs && node test-large-format.mjs && node test-large-mode.mjs && node test-paste-format.mjs && node test-tree-view.mjs && node test-ui-cleanup.mjs && node test-editor-contrast.mjs && node test-syntax.mjs && node test-wrap.mjs && node test-tree-dom.mjs && node test-history.mjs && node test-history-persist.mjs && node test-stress-guards.mjs && node test-boot.mjs && node test-windows.mjs && node test-epoch.mjs && node test-hardening.mjs && node test-large-cliffs.mjs",
     "build": "node build.mjs",
     "benchmark": "node benchmark.mjs",
     "benchmark:large": "BENCH_MB=10,20 node benchmark.mjs"
