@@ -49,6 +49,10 @@ function formatAndValidateXmlStreaming(source) {
   let textStart = 0;
   let found = 0;
   let lastApplied = 'undefined';
+  // Well-formed XML has exactly one root element: once it closes, no second
+  // root element and no non-whitespace text may follow. Comments, PIs and
+  // declarations outside the root stay legal.
+  let rootSeen = false;
 
   const indent = () => {
     const safeDepth = Math.min(depth, 255);
@@ -73,6 +77,12 @@ function formatAndValidateXmlStreaming(source) {
       }
     }
     if (!hasNonWhitespace) return;
+    // Non-whitespace text with no open element sits outside the root
+    // element: not well-formed. (Whitespace between prolog/epilog nodes is
+    // fine and was already skipped above.)
+    if (stack.length === 0) {
+      throw new Error('Invalid XML: text outside the root element.');
+    }
     write(source.slice(textStart, end));
     lastApplied = 'text';
   };
@@ -162,6 +172,11 @@ function formatAndValidateXmlStreaming(source) {
     const selfClosing = source.charCodeAt(probe) === 47;
     found += 1;
 
+    // A second element at depth zero is not well-formed XML.
+    if (stack.length === 0 && rootSeen) {
+      throw new Error('Invalid XML: multiple root elements.');
+    }
+
     if (!['text', 'cdata', 'undefined'].includes(lastApplied)) structuralBreak();
 
     const normalized = normalizeXmlOpeningTagFast(source, lt, tagEnd, nameStart, nameEnd, selfClosing);
@@ -173,16 +188,19 @@ function formatAndValidateXmlStreaming(source) {
         index = immediate;
         textStart = index;
         lastApplied = 'self-end';
+        rootSeen = true;
         continue;
       }
 
       write(normalized);
       stack.push(name);
+      rootSeen = true;
       depth += 1;
       lastApplied = 'open-end';
     } else {
       write(normalized);
       lastApplied = 'self-end';
+      rootSeen = true;
     }
 
     index = tagEnd + 1;

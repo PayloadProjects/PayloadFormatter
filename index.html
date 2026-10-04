@@ -45,6 +45,18 @@
         </div>
 
         <div class="header-tools">
+          <button
+            id="epochBtn"
+            class="epoch-btn"
+            type="button"
+            aria-haspopup="dialog"
+            aria-expanded="false"
+            aria-controls="epochPopover"
+            title="Epoch converter"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            <span>Epoch</span>
+          </button>
           <span class="privacy-label" title="Payloads are processed locally in your browser.">
             <span class="privacy-dot" aria-hidden="true"></span>Local only
           </span>
@@ -58,6 +70,69 @@
           <span id="themeIcon" class="theme-icon" aria-hidden="true">☀</span>
           <span id="themeLabel" class="sr-only">Light mode</span>
         </button>
+          <div
+            id="epochPopover"
+            class="epoch-popover"
+            role="dialog"
+            aria-label="Epoch converter"
+            hidden
+          >
+            <div class="epoch-tabs" role="tablist" aria-label="Conversion direction">
+              <button id="epochTabToDate" class="epoch-tab is-active" type="button" role="tab" aria-selected="true">Epoch → Date</button>
+              <button id="epochTabToEpoch" class="epoch-tab" type="button" role="tab" aria-selected="false">Date → Epoch</button>
+            </div>
+            <div id="epochPaneToDate" class="epoch-pane" role="tabpanel">
+              <div class="epoch-row">
+                <input
+                  id="epochInput"
+                  class="epoch-input"
+                  type="text"
+                  inputmode="numeric"
+                  placeholder="e.g. 1728000000"
+                  autocomplete="off"
+                  autocorrect="off"
+                  autocapitalize="off"
+                  spellcheck="false"
+                  aria-label="Timestamp"
+                >
+                <button id="epochNowBtn" class="epoch-mini-btn" type="button">Now</button>
+                <button id="epochLiveBtn" class="epoch-mini-btn" type="button" aria-pressed="false" title="Keep updating to the current time">Live</button>
+              </div>
+              <div class="epoch-row epoch-meta-row">
+                <label class="epoch-label" for="epochUnitSelect">Unit</label>
+                <select id="epochUnitSelect" class="epoch-select">
+                  <option value="auto">Auto-detect</option>
+                  <option value="s">Seconds</option>
+                  <option value="ms">Milliseconds</option>
+                  <option value="us">Microseconds</option>
+                  <option value="ns">Nanoseconds</option>
+                </select>
+                <span id="epochDetected" class="epoch-detected" aria-live="polite"></span>
+              </div>
+              <p id="epochError" class="epoch-error" hidden></p>
+              <div class="epoch-outputs">
+                <div class="epoch-output"><span class="epoch-output-label">UTC</span><span class="epoch-output-value" data-epoch-value="utc"></span><button class="epoch-copy" type="button" data-epoch-copy="utc" data-label="Copy" disabled>Copy</button></div>
+                <div class="epoch-output"><span class="epoch-output-label">Local</span><span class="epoch-output-value" data-epoch-value="local"></span><button class="epoch-copy" type="button" data-epoch-copy="local" data-label="Copy" disabled>Copy</button></div>
+                <div class="epoch-output"><span class="epoch-output-label">Relative</span><span class="epoch-output-value" data-epoch-value="relative"></span><button class="epoch-copy" type="button" data-epoch-copy="relative" data-label="Copy" disabled>Copy</button></div>
+                <div class="epoch-output"><span class="epoch-output-label">Seconds</span><span class="epoch-output-value" data-epoch-value="unit-s"></span><button class="epoch-copy" type="button" data-epoch-copy="unit-s" data-label="Copy" disabled>Copy</button></div>
+                <div class="epoch-output"><span class="epoch-output-label">Millis</span><span class="epoch-output-value" data-epoch-value="unit-ms"></span><button class="epoch-copy" type="button" data-epoch-copy="unit-ms" data-label="Copy" disabled>Copy</button></div>
+                <div class="epoch-output"><span class="epoch-output-label">Micros</span><span class="epoch-output-value" data-epoch-value="unit-us"></span><button class="epoch-copy" type="button" data-epoch-copy="unit-us" data-label="Copy" disabled>Copy</button></div>
+                <div class="epoch-output"><span class="epoch-output-label">Nanos</span><span class="epoch-output-value" data-epoch-value="unit-ns"></span><button class="epoch-copy" type="button" data-epoch-copy="unit-ns" data-label="Copy" disabled>Copy</button></div>
+              </div>
+            </div>
+            <div id="epochPaneToEpoch" class="epoch-pane" role="tabpanel" hidden>
+              <div class="epoch-row">
+                <input id="epochDateInput" class="epoch-input" type="datetime-local" aria-label="Date and time">
+                <select id="epochTargetUnit" class="epoch-select" aria-label="Target unit">
+                  <option value="s">Seconds</option>
+                  <option value="ms" selected>Milliseconds</option>
+                  <option value="us">Microseconds</option>
+                  <option value="ns">Nanoseconds</option>
+                </select>
+              </div>
+              <div class="epoch-output"><span class="epoch-output-label">Epoch</span><span class="epoch-output-value" data-epoch-value="epoch"></span><button class="epoch-copy" type="button" data-epoch-copy="epoch" data-label="Copy" disabled>Copy</button></div>
+            </div>
+          </div>
         </div>
       </header>
 

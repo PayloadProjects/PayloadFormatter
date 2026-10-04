@@ -175,16 +175,23 @@
 .tree-hit .tree-hit-text { background: var(--tree-hit-bg); box-shadow: 0 0 0 1px var(--tree-hit-border); }
 
 .tree-toggle {
-  width: 16px;
-  flex: 0 0 16px;
+  width: 20px;
+  flex: 0 0 20px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 14px;
+  line-height: 1;
   text-align: center;
-  transition: transform .1s ease;
+  border-radius: 4px;
+  transition: transform .1s ease, color .1s ease, background-color .1s ease;
 }
 
 .tree-node.open > .tree-row > .tree-toggle {
   transform: rotate(90deg);
+  color: var(--editor-focus);
+}
+
+.tree-row:hover > .tree-toggle {
+  background: var(--button-hover-bg);
 }
 
 .tree-key,
@@ -236,6 +243,19 @@
 }
 
 .tree-more-btn {
+  min-height: 22px;
+  padding: 1px 9px;
+  border-style: dashed;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* Gap row shown above a windowed reveal: N earlier rows are not in the DOM. */
+.tree-gap {
+  padding-block: 2px;
+}
+
+.tree-gap-btn {
   min-height: 22px;
   padding: 1px 9px;
   border-style: dashed;

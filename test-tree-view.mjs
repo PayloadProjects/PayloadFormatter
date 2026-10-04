@@ -161,6 +161,13 @@ assert.deepEqual(searchNeedles('  '), [], 'blank query finds nothing');
 assert.deepEqual(searchNeedles('""'), ['""'], 'empty quotes stay literal');
 assert.deepEqual(searchNeedles('"A@B.c"'), ['"a@b.c"', 'a@b.c'],
   'needles are lowercased like the indexed text');
+// Regression: a lone leading quote (e.g. `"housecash` typed or pasted
+// mid-copy) reported "No matches" — the old unwrap only handled paired quotes.
+assert.deepEqual(searchNeedles('"housecash'), ['"housecash', 'housecash'],
+  'lone leading quote also tries the de-quoted value');
+assert.deepEqual(searchNeedles('housecash"'), ['housecash"', 'housecash'],
+  'lone trailing quote also tries the de-quoted value');
+assert.deepEqual(searchNeedles('"'), ['"'], 'a single quote stays literal');
 
 const people = parseTree(JSON.stringify([{ email: 'user1@example.com', id: 2 }]), 'json');
 const person = childAt(people.root, 0);
@@ -168,8 +175,10 @@ const emailNode = childAt(person, 0);
 assert.equal(emailNode.key, 'email');
 assert.ok(nodeMatches(emailNode, searchNeedles('"user1@example.com"')),
   'quoted value pasted from formatted JSON matches the tree node');
-assert.ok(nodeMatches(emailNode, searchNeedles('user1@example.com')),
-  'plain value still matches');
+assert.ok(nodeMatches(emailNode, searchNeedles('"user1@example.com')),
+  'lone leading quote (the reported bug) matches the tree node');
+assert.ok(nodeMatches(emailNode, searchNeedles('user1@example.com"')),
+  'lone trailing quote matches the tree node');
 const idNode = childAt(person, 1);
 assert.equal(idNode.key, 'id');
 assert.ok(!nodeMatches(emailNode, searchNeedles('"2"')),

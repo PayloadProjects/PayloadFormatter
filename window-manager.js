@@ -14,7 +14,9 @@ export function createWindowManager() {
   let counter = 0;
 
   function cleanName(name) {
-    return String(name ?? '').trim().slice(0, MAX_WINDOW_NAME_LENGTH);
+    // Truncate by code point, not UTF-16 unit, so a trailing emoji is never
+    // split into a lone surrogate (which renders as U+FFFD).
+    return Array.from(String(name ?? '').trim()).slice(0, MAX_WINDOW_NAME_LENGTH).join('');
   }
 
   function getWindow(id) {

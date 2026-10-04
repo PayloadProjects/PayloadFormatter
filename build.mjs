@@ -16,6 +16,8 @@ const files = [
   'payload-detection.js',
   'payload-history.js',
   'history-store.js',
+  'epoch-converter.js',
+  'epoch-popover.js',
   'resilient-format.js',
   'window-manager.js',
   'input-normalization.js',

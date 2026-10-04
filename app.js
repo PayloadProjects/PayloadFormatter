@@ -2,6 +2,7 @@ import { detectPayloadMode } from './payload-detection.js';
 import { createTreeController } from './tree-controller.js';
 import { createSyntaxEditor } from './text-editor.js';
 import { createWindowManager, MAX_WINDOWS } from './window-manager.js';
+import { initEpochPopover } from './epoch-popover.js';
 import {
   getTabId,
   saveWindowHistory,
@@ -82,6 +83,7 @@ const treeController = createTreeController({
 
 initializeTheme();
 initializeWrap();
+initEpochPopover();
 restoreWindows();
 // History arrives asynchronously from IndexedDB; the windows above boot
 // synchronously from sessionStorage so the UI is never blocked on it.
@@ -412,9 +414,13 @@ function closeWindowById(id) {
   // Drop its persisted history too: closing a window forgets its datasets.
   deleteWindowHistory(tabId, target.id);
   // A pending typing update belongs to the closed window; never let it fire
-  // against whoever becomes active next.
-  clearTimeout(historyTimer);
-  historyTimer = 0;
+  // against whoever becomes active next. But when closing an *inactive*
+  // window the pending update (if any) belongs to the still-active window,
+  // so its timer must stay armed.
+  if (wasActive) {
+    clearTimeout(historyTimer);
+    historyTimer = 0;
+  }
   persistWindowList();
   // The payload was already stashed above; switch without stashing again.
   if (wasActive) activateWindow(result.activateId, { stash: false });
@@ -935,6 +941,15 @@ function saveDraftNow() {
 function clearStoredDraft() {
   if (activeWindow) clearWindowDraft(activeWindow.id);
 }
+
+// The draft save is debounced (250ms): without a flush, closing the tab
+// right after typing loses the keystrokes. pagehide fires reliably on tab
+// close; visibilitychange covers the tab being hidden first. Both write
+// synchronously, which is safe inside unload handlers.
+window.addEventListener('pagehide', () => { saveDraftNow(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') saveDraftNow();
+});
 
 function createWorker() {
   const instance = new Worker(new URL('./formatter-worker.js', import.meta.url), { type: 'module' });
