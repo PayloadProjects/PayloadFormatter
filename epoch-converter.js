@@ -62,6 +62,31 @@ export function msToUnitStrings(ms) {
   return out;
 }
 
+// Exact per-unit rows derived from the raw digit string with BigInt, so a
+// 19-digit nanosecond timestamp never silently rounds through float math.
+// Fractions are exact down to the nanosecond (sub-nanosecond parts cannot
+// be represented as integer units and are dropped). Returns null for
+// non-numeric input.
+export function exactTimestampUnits(raw, unit) {
+  const text = cleanTimestamp(raw);
+  const match = TIMESTAMP_RE.exec(text);
+  if (!match || !EPOCH_UNITS[unit]) return null;
+  const intPart = match[1].replace(/^0+/, '') || '0';
+  const fracPart = match[2] || '';
+  const scale = { s: 1000000000n, ms: 1000000n, us: 1000n, ns: 1n }[unit];
+  let ns = BigInt(intPart) * scale;
+  if (fracPart) {
+    ns += (BigInt(fracPart) * scale) / 10n ** BigInt(fracPart.length);
+  }
+  if (text.startsWith('-')) ns = -ns;
+  return {
+    s: (ns / 1000000000n).toString(),
+    ms: (ns / 1000000n).toString(),
+    us: (ns / 1000n).toString(),
+    ns: ns.toString(),
+  };
+}
+
 export function dateToUnitStrings(date, unit) {
   const ms = date.getTime();
   if (!EPOCH_UNITS[unit]) return '—';
@@ -145,6 +170,8 @@ export function convertTimestamp(raw, unit) {
     utc: formatUtc(date),
     local: formatLocal(date),
     relative: formatRelative(date),
-    units: msToUnitStrings(ms),
+    // Prefer the exact BigInt-derived rows: the float-ms path silently
+    // rounds 19-digit microsecond/nanosecond timestamps.
+    units: exactTimestampUnits(raw, unit) || msToUnitStrings(ms),
   };
 }

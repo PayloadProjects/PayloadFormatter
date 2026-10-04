@@ -250,6 +250,19 @@
   font-size: 11px;
 }
 
+/* Gap row shown above a windowed reveal: N earlier rows are not in the DOM. */
+.tree-gap {
+  padding-block: 2px;
+}
+
+.tree-gap-btn {
+  min-height: 22px;
+  padding: 1px 9px;
+  border-style: dashed;
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .tree-message {
   max-width: 62ch;
   margin: 28px auto;

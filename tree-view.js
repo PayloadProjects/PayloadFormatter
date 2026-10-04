@@ -11,6 +11,12 @@ const AUTO_OPEN_MAX_CHILDREN = 25;
 const EXPAND_ALL_ROW_BUDGET = 6000;
 const MAX_MATCHES = 1000;
 const SEARCH_VISIT_BUDGET = 400_000;
+// reveal() materializes rows to reach a search match: cap contiguous
+// rendering at the same scale as expand-all, and render a bounded window
+// around farther matches instead of every row from 0..index (a 130k-row
+// list would otherwise freeze the tab building ~1.3M DOM nodes).
+const REVEAL_ROW_BUDGET = 6000;
+const REVEAL_WINDOW_ROWS = 400;
 const STRING_PREVIEW_CHARS = 240;
 const SIMPLE_KEY = /^[A-Za-z_$][\w$]*$/;
 
@@ -469,6 +475,50 @@ export function createTreeView(container, { onCopyPath } = {}) {
     }
   }
 
+  // Drops a windowed view back to contiguous-from-zero rendering.
+  function resetContiguous(li) {
+    li._group.replaceChildren();
+    li._more = null;
+    li._windowStart = 0;
+    li._rendered = 0;
+  }
+
+  // The rendered <li> for a model child index, or null when that row is
+  // currently windowed out of the DOM. Rows stay contiguous from
+  // _windowStart, so the DOM position is the model offset plus one slot for
+  // the "earlier rows" gap button when the window does not start at zero.
+  function childLiAt(li, index) {
+    const start = li._windowStart || 0;
+    const child = li._group?.children[(start > 0 ? 1 : 0) + (index - start)];
+    return child && child._node ? child : null;
+  }
+
+  // Materializes a bounded window of rows around a far-away child index.
+  // Rows stay contiguous from _windowStart, so renderChunk's "Show more"
+  // appending and remaining-count math keep working unchanged.
+  function renderWindow(li, index) {
+    const node = li._node;
+    resetContiguous(li);
+    const start = Math.max(0, index - Math.floor(REVEAL_WINDOW_ROWS / 2));
+    const end = Math.min(node.count, start + REVEAL_WINDOW_ROWS);
+    li._windowStart = start;
+    li._rendered = start;
+    if (start > 0) {
+      const gap = document.createElement('li');
+      gap.className = 'tree-gap';
+      gap.setAttribute('role', 'none');
+      gap.style.paddingLeft = `${(li._depth + 1) * 16 + 22}px`;
+      const jump = document.createElement('button');
+      jump.type = 'button';
+      jump.className = 'tree-gap-btn';
+      jump.textContent = `\u2191 ${start.toLocaleString()} earlier rows \u2014 show from the top`;
+      jump.addEventListener('click', () => renderWindow(li, 0));
+      gap.appendChild(jump);
+      li._group.appendChild(gap);
+    }
+    renderChunk(li, end);
+  }
+
   function setOpen(li, open) {
     if (!li._node.container) return;
     if (open && !li._group) renderChunk(li, CHUNK_SIZE);
@@ -577,8 +627,20 @@ export function createTreeView(container, { onCopyPath } = {}) {
     let li = rootLi;
     for (const index of path) {
       setOpen(li, true);
-      if (li._rendered <= index) renderChunk(li, Math.ceil((index + 1) / CHUNK_SIZE) * CHUNK_SIZE);
-      li = li._group.children[index];
+      const start = li._windowStart || 0;
+      const visible = index >= start && index < (li._rendered || 0);
+      if (!visible) {
+        if (index + 1 > REVEAL_ROW_BUDGET) {
+          renderWindow(li, index);
+        } else {
+          // The match is within budget but outside the current window:
+          // go back to contiguous rendering, then extend to the match.
+          if (start > 0) resetContiguous(li);
+          renderChunk(li, Math.ceil((index + 1) / CHUNK_SIZE) * CHUNK_SIZE);
+        }
+      }
+      li = childLiAt(li, index);
+      if (!li) return;
     }
     clearHit();
     hitLi = li;

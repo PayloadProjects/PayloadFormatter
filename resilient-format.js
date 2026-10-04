@@ -7,6 +7,28 @@ import { normalizeEscapedXml, prettyXml, validateXmlLight, formatAndValidateXml 
 
 const LARGE_RESULT_METRICS_CHARS = 2 * 1024 * 1024;
 
+// Cap for the loose pretty-printer's indent depth: mirrors the XML
+// formatter's 255 cap so pathological nesting cannot turn indentation into
+// quadratic output.
+const PRETTY_LOOSE_MAX_DEPTH = 4000;
+const PRETTY_LOOSE_INDENT_CAP = 255;
+
+// V8's JSON.stringify recurses, so valid JSON nested ~10k+ deep throws a
+// RangeError even though the payload is fine. That is not a syntax problem:
+// it must never fall through to the recovery gauntlet (whose loose path is
+// quadratic on deep input and would turn 60KB into ~200MB of garbage).
+export function tooDeepJsonError() {
+  const error = new Error(
+    'This JSON is valid, but it is nested too deeply to format in this browser.'
+  );
+  error.code = 'JSON_TOO_DEEP';
+  return error;
+}
+
+export function isTooDeepError(error) {
+  return !!error && (error.code === 'JSON_TOO_DEEP' || error instanceof RangeError);
+}
+
 export function formatJsonBestEffort(input) {
   const started = now();
   const original = String(input ?? '').trim();
@@ -29,7 +51,11 @@ export function formatJsonBestEffort(input) {
           repairedNested: false,
         });
       }
-    } catch (_) {
+    } catch (error) {
+      // A RangeError here means the payload parsed but the engine cannot
+      // stringify it (too deeply nested): not a syntax problem, so it must
+      // not fall through to the recovery gauntlet.
+      if (isTooDeepError(error)) throw error;
       // Fall through to encoding/malformed recovery.
     }
   }
@@ -69,6 +95,7 @@ export function formatJsonBestEffort(input) {
         repairedNested: decoded.repairedNested,
       });
     } catch (error) {
+      if (isTooDeepError(error)) throw error;
       lastError = error;
     }
   }
@@ -91,6 +118,7 @@ export function formatJsonBestEffort(input) {
         repairedNested: decoded.repairedNested,
       });
     } catch (error) {
+      if (isTooDeepError(error)) throw error;
       lastError = error;
     }
   }
@@ -122,7 +150,16 @@ function buildJsonSuccess({
   decodedLayers,
   repairedNested,
 }) {
-  const formatted = JSON.stringify(parsed, null, 2);
+  // V8's stringify is recursive: valid JSON nested ~10k+ deep throws a
+  // RangeError here. Convert it into the marked too-deep error (with a clear
+  // message) so callers never mistake it for a syntax problem.
+  let formatted;
+  try {
+    formatted = JSON.stringify(parsed, null, 2);
+  } catch (error) {
+    if (error instanceof RangeError) throw tooDeepJsonError();
+    throw error;
+  }
   const allNotes = [
     ...notes,
     ...(decodedLayers
@@ -417,7 +454,10 @@ export function prettyJsonLoose(input) {
   const trimRight = () => { current = current.replace(/[ \t]+$/g, ''); };
   const newline = () => {
     trimRight();
-    if (current.trim()) lines.push(`${'  '.repeat(Math.max(0, depth))}${current.trimStart()}`);
+    // Indent depth is capped (like the XML formatter's 255 cap): without it
+    // each line's indent grows with depth and deep input turns quadratic.
+    const capped = Math.min(PRETTY_LOOSE_INDENT_CAP, Math.max(0, depth));
+    if (current.trim()) lines.push(`${'  '.repeat(capped)}${current.trimStart()}`);
     current = '';
   };
 
@@ -478,6 +518,9 @@ export function prettyJsonLoose(input) {
       write(char);
       newline();
       depth += 1;
+      // The loose path is for malformed input: refuse to pretty-print
+      // absurd nesting instead of building a quadratic blob.
+      if (depth > PRETTY_LOOSE_MAX_DEPTH) throw tooDeepJsonError();
       continue;
     }
 
