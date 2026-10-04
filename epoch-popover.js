@@ -62,6 +62,9 @@ export function initEpochPopover() {
   const targetUnit = popover.querySelector('#epochTargetUnit');
   const dateOutput = popover.querySelector('#epochDateOutput');
 
+  // Every row that convert() can fill; cleared together on empty input or error.
+  const OUTPUT_ROWS = ['utc', 'local', 'relative', 'unit-s', 'unit-ms', 'unit-us', 'unit-ns'];
+
   const showError = (message) => {
     error.textContent = message || '';
     error.hidden = !message;
@@ -79,15 +82,17 @@ export function initEpochPopover() {
   };
 
   const renderUnits = (units) => {
-    const text = `s ${units.s} · ms ${units.ms} · µs ${units.us} · ns ${units.ns}`;
-    setRow('units', text);
+    setRow('unit-s', units.s);
+    setRow('unit-ms', units.ms);
+    setRow('unit-us', units.us);
+    setRow('unit-ns', units.ns);
   };
 
   const convert = () => {
     const raw = input.value;
     if (!raw.trim()) {
       showError('');
-      for (const name of ['utc', 'local', 'relative', 'units']) setRow(name, '');
+      for (const name of OUTPUT_ROWS) setRow(name, '');
       detected.textContent = '';
       return;
     }
@@ -98,13 +103,13 @@ export function initEpochPopover() {
       : '';
     if (!unit) {
       showError('Enter a numeric timestamp.');
-      for (const name of ['utc', 'local', 'relative', 'units']) setRow(name, '');
+      for (const name of OUTPUT_ROWS) setRow(name, '');
       return;
     }
     const result = convertTimestamp(raw, unit);
     if (result.error) {
       showError(result.error);
-      for (const name of ['utc', 'local', 'relative', 'units']) setRow(name, '');
+      for (const name of OUTPUT_ROWS) setRow(name, '');
       return;
     }
     showError('');

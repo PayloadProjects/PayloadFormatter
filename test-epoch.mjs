@@ -131,6 +131,16 @@ assert.ok(
   'local row renders',
 );
 assert.equal(
+  doc.querySelector('[data-epoch-value="unit-s"]').textContent,
+  '1728000000',
+  'seconds row holds just the seconds value',
+);
+assert.equal(
+  doc.querySelector('[data-epoch-value="unit-ns"]').textContent,
+  '1728000000000000000',
+  'nanos row holds just the nanoseconds value',
+);
+assert.equal(
   doc.querySelector('[data-epoch-copy="utc"]').disabled,
   false,
   'copy enables once there is a value',
@@ -170,6 +180,17 @@ doc.querySelector('[data-epoch-copy="utc"]').click();
 await sleep(50);
 assert.ok(copied && copied.endsWith('Z'), 'copy writes the UTC value');
 assert.equal(doc.querySelector('[data-epoch-copy="utc"]').textContent, 'Copied', 'copy feedback shows');
+
+// Each unit row copies only its own value, not a combined string.
+input.value = '1728000000';
+input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+await sleep(50);
+doc.querySelector('[data-epoch-copy="unit-ms"]').click();
+await sleep(50);
+assert.equal(copied, '1728000000000', 'millis row copies just milliseconds');
+doc.querySelector('[data-epoch-copy="unit-ns"]').click();
+await sleep(50);
+assert.equal(copied, '1728000000000000000', 'nanos row copies just nanoseconds');
 
 // Date → Epoch tab.
 q('#epochTabToEpoch').click();

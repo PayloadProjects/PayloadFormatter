@@ -195,7 +195,7 @@ button { color: inherit; }
 .epoch-outputs { display: flex; flex-direction: column; border: 1px solid var(--panel-border); border-radius: 8px; overflow: hidden; }
 .epoch-output { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--strip-bg); }
 .epoch-output + .epoch-output { border-top: 1px solid var(--panel-border); }
-.epoch-output-label { flex: 0 0 56px; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.epoch-output-label { flex: 0 0 64px; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .epoch-output-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-family: Consolas, monospace; color: var(--text); }
 .epoch-output-value:empty::before { content: '—'; color: var(--muted); }
 .epoch-copy { flex: 0 0 auto; min-height: 24px; padding: 2px 8px; font-size: 11px; }
