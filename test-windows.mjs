@@ -158,6 +158,8 @@ const [html, css, app, build, pkg] = await Promise.all(
   assert.ok(css.includes('.window-bar'), 'window bar styles exist');
   assert.ok(css.includes('.window-tab.is-active'), 'active tab is styled');
   assert.ok(css.includes('.window-rename-input'), 'rename input is styled');
+  assert.ok(/\.window-tabs \{[^}]*flex: 0 1 auto;/.test(css),
+    'tab strip hugs its tabs so the new-window button sits right after them');
   assert.ok(build.includes("'window-manager.js'"), 'deploy bundle ships the window manager');
   const scripts = JSON.parse(pkg).scripts;
   assert.ok(scripts.test.includes('test-windows.mjs'), 'suite runs the window tests');

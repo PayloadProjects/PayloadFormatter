@@ -180,7 +180,7 @@ h1 { margin: 0; color: var(--heading); font-size: 15px; line-height: 1.25; font-
 .editor-frame { min-height: 0; min-width: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--panel-border); border-radius: 12px; background: var(--panel-bg); box-shadow: var(--shadow); }
 /* Payload windows: tab bar for juggling payloads without browser tabs. */
 .window-bar { flex: 0 0 auto; display: flex; align-items: flex-end; gap: 6px; min-height: 30px; padding: 0 2px; }
-.window-tabs { min-width: 0; flex: 1 1 auto; display: flex; align-items: flex-end; gap: 4px; overflow-x: auto; scrollbar-width: thin; }
+.window-tabs { min-width: 0; flex: 0 1 auto; display: flex; align-items: flex-end; gap: 4px; overflow-x: auto; scrollbar-width: thin; }
 .window-tab { flex: 0 0 auto; display: flex; align-items: center; gap: 4px; max-width: 180px; padding: 3px 4px 3px 10px; border: 1px solid var(--panel-border); border-bottom: 0; border-radius: 8px 8px 0 0; background: var(--strip-bg); }
 .window-tab.is-active { background: var(--panel-bg); }
 .window-tab-select { min-height: 22px; padding: 1px 4px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; max-width: 140px; }
