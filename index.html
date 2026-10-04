@@ -30,7 +30,7 @@
       })();
     </script>
     <title>JSON/XML Formatter</title>
-    <link rel="stylesheet" href="./style.css?v=history-v1" />
+    <link rel="stylesheet" href="./style.css?v=windows-v1" />
     <link rel="stylesheet" href="./tree-view.css?v=wrap-compact-v1" />
     <link rel="stylesheet" href="./text-editor.css?v=wrap-compact-v1" />
   </head>
@@ -60,6 +60,11 @@
         </button>
         </div>
       </header>
+
+      <div class="window-bar">
+        <div class="window-tabs" id="windowTabs" role="tablist" aria-label="Payload windows"></div>
+        <button id="newWindowBtn" class="window-new" type="button" title="New window">+</button>
+      </div>
 
       <section class="workspace" aria-label="JSON/XML formatter">
         <div id="editorFrame" class="editor-frame" data-view="text">
@@ -160,7 +165,7 @@
       </section>
     </main>
 
-    <script type="module" src="./app.js?v=history-v1"></script>
+    <script type="module" src="./app.js?v=windows-v1"></script>
     <script type="module" src="./ui-controls.js?v=tree-actions-visible-v1"></script>
   </body>
 </html>

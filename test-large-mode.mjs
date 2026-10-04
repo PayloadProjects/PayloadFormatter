@@ -19,7 +19,8 @@ assert.ok(app.includes('enterLargeMode(result.formatted, { formatted: true })'),
   'large formatted JSON/XML output must stay out of the textarea layout engine');
 assert.ok(app.includes('const text = getPayloadText()'),
   'formatter and copy paths must operate on the full in-memory payload');
-assert.ok(app.includes('if (inLargeMode()) {\n    clearStoredDraft();'),
+assert.ok(
+  /function persistPayloadFor\(win, text, isLarge\) \{[\s\S]*?if \(isLarge \|\| !text \|\| text\.length > MAX_DRAFT_BYTES\) \{\s*clearWindowDraft\(win\.id\);/.test(app),
   'preview text must never be persisted as if it were the full payload');
 assert.ok(html.includes('id="largeNotice"'),
   'large mode must tell the user that the textarea is only a preview');

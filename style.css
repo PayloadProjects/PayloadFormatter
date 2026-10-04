@@ -178,6 +178,18 @@ h1 { margin: 0; color: var(--heading); font-size: 15px; line-height: 1.25; font-
 .privacy-dot { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: var(--local-dot); }
 .workspace { display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1; }
 .editor-frame { min-height: 0; min-width: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--panel-border); border-radius: 12px; background: var(--panel-bg); box-shadow: var(--shadow); }
+/* Payload windows: tab bar for juggling payloads without browser tabs. */
+.window-bar { flex: 0 0 auto; display: flex; align-items: flex-end; gap: 6px; min-height: 30px; padding: 0 2px; }
+.window-tabs { min-width: 0; flex: 1 1 auto; display: flex; align-items: flex-end; gap: 4px; overflow-x: auto; scrollbar-width: thin; }
+.window-tab { flex: 0 0 auto; display: flex; align-items: center; gap: 4px; max-width: 180px; padding: 3px 4px 3px 10px; border: 1px solid var(--panel-border); border-bottom: 0; border-radius: 8px 8px 0 0; background: var(--strip-bg); }
+.window-tab.is-active { background: var(--panel-bg); }
+.window-tab-select { min-height: 22px; padding: 1px 4px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; max-width: 140px; }
+.window-tab.is-active .window-tab-select { color: var(--heading); }
+.window-tab-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.window-tab-close { min-height: 22px; min-width: 22px; padding: 0 4px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); font-size: 13px; line-height: 1; }
+.window-tab-close:hover:not(:disabled) { color: var(--danger-text); background: var(--danger-hover-bg); }
+.window-rename-input { width: 120px; min-height: 22px; padding: 1px 4px; border: 1px solid var(--editor-focus); border-radius: 4px; background: var(--editor-bg); color: var(--editor-text); font: inherit; font-size: 12px; font-weight: 600; }
+.window-new { flex: 0 0 auto; min-height: 26px; min-width: 30px; font-size: 15px; line-height: 1; }
 .editor-strip { min-height: 28px; flex: 0 0 auto; padding: 2px 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--panel-border); background: var(--strip-bg); }
 .editor-strip-meta { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .strip-btn { min-height: 24px; padding: 2px 10px; border: 1px solid var(--panel-border); border-radius: 8px; background: var(--editor-bg); color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; }

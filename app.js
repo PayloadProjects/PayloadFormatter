@@ -1,9 +1,11 @@
 import { detectPayloadMode } from './payload-detection.js';
 import { createTreeController } from './tree-controller.js';
 import { createSyntaxEditor } from './text-editor.js';
-import { createPayloadHistory } from './payload-history.js';
+import { createWindowManager, MAX_WINDOWS } from './window-manager.js';
 
 const STORAGE_KEY = 'payload-formatter:draft:v1';
+const WINDOWS_KEY = 'payload-formatter:windows:v1';
+const WINDOW_DRAFT_PREFIX = 'payload-formatter:window-draft:';
 const THEME_STORAGE_KEY = 'payload-formatter:theme:v1';
 const WRAP_STORAGE_KEY = 'payload-formatter:wrap:v1';
 const MAX_DRAFT_BYTES = 2 * 1024 * 1024;
@@ -28,6 +30,8 @@ const themeLabel = document.querySelector('#themeLabel');
 const wrapToggleBtn = document.querySelector('#wrapToggleBtn');
 const historyBackBtn = document.querySelector('#historyBackBtn');
 const historyForwardBtn = document.querySelector('#historyForwardBtn');
+const windowTabs = document.querySelector('#windowTabs');
+const newWindowBtn = document.querySelector('#newWindowBtn');
 const root = document.documentElement;
 
 let busy = false;
@@ -43,7 +47,11 @@ let pastePending = false;
 let historyTimer = 0;
 const pending = new Map();
 const syntaxEditor = createSyntaxEditor(editor);
-const history = createPayloadHistory();
+const windowManager = createWindowManager();
+// The active window owns the visible payload; `history` always points at its
+// paste history and is rebound on every window switch.
+let activeWindow = null;
+let history = null;
 
 const treeController = createTreeController({
   getText: getPayloadText,
@@ -56,8 +64,7 @@ const treeController = createTreeController({
 
 initializeTheme();
 initializeWrap();
-restoreDraft();
-initializeHistory();
+restoreWindows();
 refreshUi();
 treeController.refresh();
 
@@ -116,6 +123,21 @@ copyBtn.addEventListener('click', copyPayload);
 clearBtn.addEventListener('click', clearPayload);
 historyBackBtn?.addEventListener('click', () => navigateHistory(-1));
 historyForwardBtn?.addEventListener('click', () => navigateHistory(1));
+newWindowBtn?.addEventListener('click', createNewWindow);
+windowTabs?.addEventListener('click', (event) => {
+  const tab = event.target.closest('.window-tab');
+  if (!tab) return;
+  if (event.target.closest('.window-tab-close')) {
+    closeWindowById(tab.dataset.windowId);
+    return;
+  }
+  activateWindow(tab.dataset.windowId);
+});
+windowTabs?.addEventListener('dblclick', (event) => {
+  if (event.target.closest('.window-tab-close')) return;
+  const tab = event.target.closest('.window-tab');
+  if (tab) startRename(tab);
+});
 themeToggleBtn?.addEventListener('click', () => {
   applyTheme(currentTheme() === 'dark' ? 'light' : 'dark', { persist: true });
 });
@@ -191,10 +213,198 @@ function applyWrap(on, { persist = false } = {}) {
 }
 
 
-function initializeHistory() {
-  const text = getPayloadText();
-  if (text) history.push(text);
+function restoreWindows() {
+  let meta = null;
+  try { meta = JSON.parse(sessionStorage.getItem(WINDOWS_KEY)); } catch (_) {}
+  let restored = false;
+  if (meta && Array.isArray(meta.windows) && meta.windows.length) {
+    for (const item of meta.windows) {
+      windowManager.restoreWindow(item.id, item.name, readWindowDraft(item.id));
+    }
+    if (Number.isFinite(meta.counter)) windowManager.setCounter(meta.counter);
+    restored = windowManager.setActive(meta.activeId) && windowManager.size > 0;
+    if (!restored && windowManager.size > 0) {
+      windowManager.setActive(windowManager.windows[0].id);
+      restored = true;
+    }
+  }
+  if (!restored) {
+    // First run with windows (or a fresh tab): migrate the legacy single draft
+    // into the first window so existing users lose nothing.
+    let legacy = null;
+    try { legacy = sessionStorage.getItem(STORAGE_KEY); } catch (_) {}
+    try { sessionStorage.removeItem(STORAGE_KEY); } catch (_) {}
+    windowManager.newWindow('', legacy || '');
+    if (legacy) setStatus('Restored this tab’s draft.', 'success');
+  }
+  activeWindow = windowManager.getActive();
+  history = activeWindow.history;
+  // Drafts are capped below the large-payload threshold, so a restored payload
+  // always fits the plain editor; the guard below is insurance regardless.
+  const text = activeWindow.payload || '';
+  if (text.length >= LARGE_PAYLOAD_CHARS) enterLargeMode(text, { formatted: false });
+  else editor.value = text;
+  persistWindowList();
+  renderWindowBar();
   syncHistoryNav();
+}
+
+function persistWindowList() {
+  if (!activeWindow) return;
+  try {
+    sessionStorage.setItem(WINDOWS_KEY, JSON.stringify(windowManager.toJSON()));
+  } catch (_) {}
+}
+
+function readWindowDraft(id) {
+  try { return sessionStorage.getItem(WINDOW_DRAFT_PREFIX + id) || ''; } catch (_) { return ''; }
+}
+
+function writeWindowDraft(id, text) {
+  try { sessionStorage.setItem(WINDOW_DRAFT_PREFIX + id, text); } catch (_) {}
+}
+
+function clearWindowDraft(id) {
+  try { sessionStorage.removeItem(WINDOW_DRAFT_PREFIX + id); } catch (_) {}
+}
+
+// Writes one window's payload to its draft slot, keeping the long-standing
+// rules: large payloads are never persisted, oversize drafts are dropped so a
+// refresh can never resurrect stale content.
+function persistPayloadFor(win, text, isLarge) {
+  if (!win) return;
+  if (isLarge || !text || text.length > MAX_DRAFT_BYTES) {
+    clearWindowDraft(win.id);
+    return;
+  }
+  if (utf8ByteLength(text) > MAX_DRAFT_BYTES) {
+    clearWindowDraft(win.id);
+    return;
+  }
+  writeWindowDraft(win.id, text);
+}
+
+function activateWindow(id, { stash = true } = {}) {
+  const next = windowManager.getWindow(id);
+  if (!next || busy) return;
+  if (activeWindow && next.id === activeWindow.id) return;
+  if (stash && activeWindow) {
+    const text = getPayloadText();
+    activeWindow.payload = text;
+    persistPayloadFor(activeWindow, text, inLargeMode());
+  }
+  activeWindow = next;
+  history = next.history;
+  windowManager.setActive(id);
+  setPayloadText(next.payload || '');
+  renderWindowBar();
+  syncHistoryNav();
+  persistWindowList();
+  setStatus(`Switched to ${next.name}.`, 'success');
+}
+
+function createNewWindow() {
+  if (busy) return;
+  const win = windowManager.newWindow();
+  if (!win) {
+    setStatus(`Window limit reached (${MAX_WINDOWS}). Close one to make room.`, 'warning');
+    return;
+  }
+  persistWindowList();
+  activateWindow(win.id);
+  editor.focus();
+}
+
+function closeWindowById(id) {
+  if (busy) return;
+  const target = windowManager.getWindow(id);
+  if (!target) return;
+  const wasActive = !!activeWindow && target.id === activeWindow.id;
+  if (wasActive) target.payload = getPayloadText();
+  const result = windowManager.closeWindow(id);
+  if (!result || !result.closed) {
+    setStatus('A workspace needs at least one window.', 'warning');
+    return;
+  }
+  clearWindowDraft(target.id);
+  persistWindowList();
+  // The payload was already stashed above; switch without stashing again.
+  if (wasActive) activateWindow(result.activateId, { stash: false });
+  else renderWindowBar();
+  setStatus(`Closed ${target.name}.`, 'success');
+}
+
+function renderWindowBar() {
+  if (!windowTabs || !activeWindow) return;
+  windowTabs.replaceChildren();
+  const showClose = windowManager.size > 1;
+  for (const win of windowManager.windows) {
+    const isActive = win.id === activeWindow.id;
+    const tab = document.createElement('div');
+    tab.className = `window-tab${isActive ? ' is-active' : ''}`;
+    tab.dataset.windowId = win.id;
+    tab.setAttribute('role', 'tab');
+    tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+
+    const select = document.createElement('button');
+    select.type = 'button';
+    select.className = 'window-tab-select';
+    select.title = `${win.name} — double-click to rename`;
+    const name = document.createElement('span');
+    name.className = 'window-tab-name';
+    name.textContent = win.name;
+    select.append(name);
+    tab.append(select);
+
+    if (showClose) {
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.className = 'window-tab-close';
+      close.textContent = '×';
+      close.title = `Close ${win.name}`;
+      close.setAttribute('aria-label', `Close ${win.name}`);
+      tab.append(close);
+    }
+    windowTabs.append(tab);
+  }
+}
+
+function startRename(tabEl) {
+  const id = tabEl?.dataset.windowId;
+  const win = id && windowManager.getWindow(id);
+  if (!win || tabEl.querySelector('.window-rename-input')) return;
+  const nameEl = tabEl.querySelector('.window-tab-name');
+  if (!nameEl) return;
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'window-rename-input';
+  input.value = win.name;
+  input.maxLength = 40;
+  input.setAttribute('aria-label', 'Rename window');
+  nameEl.replaceWith(input);
+  input.focus();
+  input.select();
+
+  let done = false;
+  const finish = (save) => {
+    if (done) return;
+    done = true;
+    if (save) {
+      const next = input.value.trim();
+      if (next && next !== win.name) {
+        windowManager.renameWindow(id, next);
+        persistWindowList();
+      }
+    }
+    renderWindowBar();
+  };
+  input.addEventListener('keydown', (event) => {
+    event.stopPropagation();
+    if (event.key === 'Enter') finish(true);
+    else if (event.key === 'Escape') finish(false);
+  });
+  input.addEventListener('blur', () => finish(true));
 }
 
 function pushHistory() {
@@ -214,11 +424,9 @@ function syncHistoryNav() {
   if (historyForwardBtn) historyForwardBtn.disabled = busy || !history.canForward();
 }
 
-function navigateHistory(direction) {
-  if (busy) return;
-  const text = direction < 0 ? history.back() : history.forward();
-  if (text === null) return;
-
+// Replaces the visible payload wholesale (history navigation, window
+// switches). No history side effects: callers manage their own entries.
+function setPayloadText(text) {
   editRevision += 1;
   if (text.length >= LARGE_PAYLOAD_CHARS) {
     enterLargeMode(text, { formatted: false });
@@ -230,8 +438,15 @@ function navigateHistory(direction) {
     else refreshUi();
   }
   saveDraftNow();
-  syncHistoryNav();
   treeController.refresh();
+}
+
+function navigateHistory(direction) {
+  if (busy) return;
+  const text = direction < 0 ? history.back() : history.forward();
+  if (text === null) return;
+  setPayloadText(text);
+  syncHistoryNav();
   setStatus(direction < 0 ? 'Restored previous payload.' : 'Restored next payload.', 'success');
 }
 
@@ -565,44 +780,14 @@ function scheduleDraftSave() {
 
 function saveDraftNow() {
   clearTimeout(persistTimer);
-  if (inLargeMode()) {
-    clearStoredDraft();
-    return;
-  }
-
-  const text = editor.value;
-  if (!text) {
-    clearStoredDraft();
-    return;
-  }
-  // UTF-8 byte length can never be smaller than the number of UTF-16 code
-  // units for plain ASCII-heavy payloads. Skip the expensive byte count early
-  // for drafts that are obviously too large to persist. Also remove any older
-  // small draft so refresh can never resurrect stale content.
-  if (text.length > MAX_DRAFT_BYTES) {
-    clearStoredDraft();
-    return;
-  }
-  const bytes = utf8ByteLength(text);
-  if (bytes > MAX_DRAFT_BYTES) {
-    clearStoredDraft();
-    return;
-  }
-  try { sessionStorage.setItem(STORAGE_KEY, text); } catch (_) {}
+  if (!activeWindow) return;
+  // The debounced keystroke path, formatting, and window switches all funnel
+  // here: persist the visible payload into the active window's draft slot.
+  persistPayloadFor(activeWindow, getPayloadText(), inLargeMode());
 }
 
 function clearStoredDraft() {
-  try { sessionStorage.removeItem(STORAGE_KEY); } catch (_) {}
-}
-
-function restoreDraft() {
-  try {
-    const saved = sessionStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      editor.value = saved;
-      setStatus('Restored this tab’s draft.', 'success');
-    }
-  } catch (_) {}
+  if (activeWindow) clearWindowDraft(activeWindow.id);
 }
 
 function createWorker() {

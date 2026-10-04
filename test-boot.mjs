@@ -81,4 +81,38 @@ q('#historyForwardBtn').click();
 await sleep(50);
 assert.equal(editor.value, '{"b":2}', 'forward restores paste B');
 
+// --- Window flow: new window, switch, rename ---
+const tabs = () => [...document.querySelectorAll('.window-tab')];
+assert.equal(tabs().length, 1, 'one window at startup');
+assert.equal(tabs()[0].querySelector('.window-tab-name').textContent, 'Window 1');
+
+q('#newWindowBtn').click();
+await sleep(50);
+assert.equal(tabs().length, 2, 'new window adds a tab');
+assert.ok(tabs()[1].classList.contains('is-active'), 'the new window is active');
+assert.equal(editor.value, '', 'the new window starts empty');
+
+await nativePaste('{"x":9}');
+tabs()[0].click();
+await sleep(50);
+assert.equal(editor.value, '{"b":2}', 'switching tabs restores that window’s payload');
+assert.ok(tabs()[0].classList.contains('is-active'), 'tab active state follows');
+tabs()[1].click();
+await sleep(50);
+assert.equal(editor.value, '{"x":9}', 'switching back restores the second payload');
+
+const firstTab = tabs()[0];
+firstTab.dispatchEvent(new dom.window.MouseEvent('dblclick', { bubbles: true }));
+await sleep(50);
+const renameInput = firstTab.querySelector('.window-rename-input');
+assert.ok(renameInput, 'double-click opens the rename input');
+renameInput.value = 'Orders';
+renameInput.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+await sleep(50);
+assert.equal(
+  document.querySelector('.window-tab').querySelector('.window-tab-name').textContent,
+  'Orders',
+  'rename commits on Enter',
+);
+
 console.log('All boot and flow regression tests passed.');

@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createPayloadHistory } from './payload-history.js';
 
-const [html, css, app, build, pkg] = await Promise.all(
-  ['index.html', 'style.css', 'app.js', 'build.mjs', 'package.json']
+const [html, css, app, managerJs, build, pkg] = await Promise.all(
+  ['index.html', 'style.css', 'app.js', 'window-manager.js', 'build.mjs', 'package.json']
     .map((file) => readFile(new URL(file, import.meta.url), 'utf8')),
 );
 
@@ -177,8 +177,9 @@ const [html, css, app, build, pkg] = await Promise.all(
 
 // --- Wiring: app.js records pastes, edits, clears and navigates ---
 {
-  assert.ok(app.includes("from './payload-history.js'"), 'app.js imports the history model');
-  assert.ok(app.includes('initializeHistory()'), 'history seeded from the restored draft');
+  assert.ok(app.includes("from './window-manager.js'"), 'app.js imports the window manager');
+  assert.ok(managerJs.includes("from './payload-history.js'"), 'each window owns its own history via the manager');
+  assert.ok(app.includes('restoreWindows()'), 'windows restore at startup, each with its own seeded history');
   const accept = app.match(/function acceptPastedText[\s\S]*?\n}/)?.[0];
   assert.ok(accept?.includes('pushHistory()'), 'pasted payloads are recorded');
   assert.ok(app.includes('history.updateCurrent(getPayloadText())'), 'formats rewrite the current entry');

@@ -16,6 +16,7 @@ const files = [
   'payload-detection.js',
   'payload-history.js',
   'resilient-format.js',
+  'window-manager.js',
   'input-normalization.js',
   'xml-format.js',
   'text-editor.js',

@@ -83,8 +83,8 @@ assert.match(editorCss, /\.syntax-gutter \{[^}]*padding: 12px 8px 12px 0;/,
 
 // Cache-busted asset versions cover every touched file.
 for (const [asset, version] of [
-  ['style.css', 'history-v1'],
-  ['app.js', 'history-v1'],
+  ['style.css', 'windows-v1'],
+  ['app.js', 'windows-v1'],
   ['text-editor.css', 'wrap-compact-v1'],
   ['tree-view.css', 'wrap-compact-v1'],
 ]) {
