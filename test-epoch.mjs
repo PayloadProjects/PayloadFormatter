@@ -232,6 +232,20 @@ q('#epochTabToEpoch').click();
 await sleep(50);
 assert.equal(liveBtn.getAttribute('aria-pressed'), 'false', 'tab switch stops live');
 
+// Clicking into the input freezes live mode, keeping the value as a snapshot
+// for copying or editing. pointerdown (not focus) is the real trigger: the
+// input is usually already focused, and focus would not re-fire on click.
+q('#epochTabToDate').click();
+await sleep(50);
+liveBtn.click();
+await sleep(50);
+assert.equal(liveBtn.getAttribute('aria-pressed'), 'true', 'live re-engaged');
+const snapshot = input.value;
+input.dispatchEvent(new dom.window.MouseEvent('pointerdown', { bubbles: true }));
+await sleep(1200);
+assert.equal(liveBtn.getAttribute('aria-pressed'), 'false', 'clicking the input stops live');
+assert.equal(input.value, snapshot, 'clicked value stays put for copying/editing');
+
 // Date → Epoch tab.
 q('#epochTabToEpoch').click();
 await sleep(50);

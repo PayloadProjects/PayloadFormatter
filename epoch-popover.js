@@ -211,6 +211,14 @@ export function initEpochPopover() {
     setLive(false);
     convert();
   });
+  input.addEventListener('focus', () => {
+    // Clicking/tabbing into the box means copy or edit: freeze live mode so
+    // the value stops changing under the cursor, keeping the last tick as a
+    // snapshot. pointerdown covers clicks when the input is already focused
+    // (focus would not re-fire); focus covers keyboard tabbing.
+    setLive(false);
+  });
+  input.addEventListener('pointerdown', () => setLive(false));
   unitSelect.addEventListener('change', () => {
     if (liveTimer) tickLive();
     else convert();
