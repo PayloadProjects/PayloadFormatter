@@ -365,6 +365,12 @@ function activateWindow(id, { stash = true } = {}) {
   if (!next || busy) return;
   if (activeWindow && next.id === activeWindow.id) return;
   if (stash && activeWindow) {
+    // Flush the outgoing window's pending typing update first: the debounce
+    // timer would otherwise fire after the switch and update the wrong
+    // window's history.
+    clearTimeout(historyTimer);
+    historyTimer = 0;
+    applyHistoryUpdate();
     const text = getPayloadText();
     activeWindow.payload = text;
     persistPayloadFor(activeWindow, text, inLargeMode());
@@ -405,6 +411,10 @@ function closeWindowById(id) {
   clearWindowDraft(target.id);
   // Drop its persisted history too: closing a window forgets its datasets.
   deleteWindowHistory(tabId, target.id);
+  // A pending typing update belongs to the closed window; never let it fire
+  // against whoever becomes active next.
+  clearTimeout(historyTimer);
+  historyTimer = 0;
   persistWindowList();
   // The payload was already stashed above; switch without stashing again.
   if (wasActive) activateWindow(result.activateId, { stash: false });
@@ -496,11 +506,20 @@ function scheduleHistoryUpdate() {
   clearTimeout(historyTimer);
   historyTimer = setTimeout(() => {
     historyTimer = 0;
-    if (history.updateCurrent(getPayloadText())) {
-      syncHistoryNav();
-      saveHistoryFor(activeWindow);
-    }
+    applyHistoryUpdate();
   }, 250);
+}
+
+// Applies the debounced typing update to the active window's history.
+// Extracted so window switches can flush it synchronously: otherwise a fast
+// switch lets the timer fire against the NEW window and the old window's
+// history never learns the typed text.
+function applyHistoryUpdate() {
+  if (!activeWindow || !history) return;
+  if (history.updateCurrent(getPayloadText())) {
+    syncHistoryNav();
+    saveHistoryFor(activeWindow);
+  }
 }
 
 function syncHistoryNav() {

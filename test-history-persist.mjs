@@ -423,4 +423,54 @@ __clearMemoryBackend();
 }
 __clearMemoryBackend();
 
+// --- Boot: fast window switch keeps the debounced history update --------
+// Regression for the SDET-found race: typing in Window 1 then switching to
+// Window 2 inside the 250ms debounce used to fire the update against Window
+// 2's history, leaving Window 1's history stale (typing updates the current
+// entry rather than pushing, so the check is Back/Forward content).
+{
+  const dom = new JSDOM(html, { url: 'http://localhost/', pretendToBeVisual: true });
+  installGlobals(dom);
+  const app = await import('./app.js?history-persist=8');
+  await app.__historyHydrated();
+  const doc = dom.window.document;
+  const editor = doc.querySelector('#payloadInput');
+
+  await ctrlVPaste(dom, editor, '{"a":1}');
+  await ctrlVPaste(dom, editor, '{"b":2}');
+  editor.value = '{"b":2,"typed":true}';
+  editor.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  await sleep(50); // switch well inside the 250ms debounce
+  doc.querySelector('#newWindowBtn').click();
+  await sleep(400);
+  await app.__flushHistorySaves();
+
+  const tabs = [...doc.querySelectorAll('.window-tab')];
+  const w2Id = tabs[1].dataset.windowId;
+  tabs[0].click();
+  await sleep(50);
+  const back = doc.querySelector('#historyBackBtn');
+  const forward = doc.querySelector('#historyForwardBtn');
+  assert.equal(back.disabled, false, 'history survives the fast switch');
+  back.click();
+  await sleep(50);
+  assert.equal(editor.value, '{"a":1}', 'back reaches the first payload');
+  forward.click();
+  await sleep(50);
+  assert.equal(
+    editor.value,
+    '{"b":2,"typed":true}',
+    'forward reaches the typed text: the debounce updated Window 1, not Window 2',
+  );
+
+  // And Window 2's persisted history was never polluted by Window 1's typing.
+  const records = await loadWindowHistories(app.__getTabId());
+  const w2 = records.find((record) => record.windowId === w2Id);
+  assert.ok(
+    !w2 || !w2.entries.some((entry) => entry.includes('typed')),
+    "Window 2's history is untouched by Window 1's typing",
+  );
+}
+__clearMemoryBackend();
+
 console.log('All history persistence tests passed.');
