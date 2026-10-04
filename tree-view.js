@@ -126,8 +126,7 @@ export function searchNeedles(query) {
 }
 
 export function nodeMatches(node, needles) {
-  const list = Array.isArray(needles) ? needles : [needles];
-  return list.some((query) => nodeMatchesOne(node, query));
+  return needles.some((query) => nodeMatchesOne(node, query));
 }
 
 function nodeMatchesOne(node, query) {
@@ -359,7 +358,6 @@ export function createTreeView(container, { onCopyPath } = {}) {
     const li = document.createElement('li');
     li.className = 'tree-node';
     li._searchPath = searchPath;
-    if (matchPaths.has(searchPath)) li.classList.add('tree-match');
     li.setAttribute('role', 'treeitem');
     li.setAttribute('aria-level', String(depth + 1));
     li._node = node;
@@ -664,39 +662,32 @@ export function createTreeView(container, { onCopyPath } = {}) {
       lastTruncated = false;
       matchPaths.clear();
       needles = searchNeedles(query);
-      // Unmark previous results first: with empty needles paintRowHits unwraps,
-      // so clearing the query cannot leave stale highlight spans behind.
-      for (const li of container.querySelectorAll('.tree-node')) {
-        li.classList.remove('tree-match');
-        paintRowHits(li);
-      }
-      if (!needles.length || !root) return summary();
-
-      if (nodeMatches(root, needles)) matches.push([]);
-      const stack = [{ node: root, next: 0, path: [] }];
-      let visits = 0;
-      while (stack.length) {
-        if (visits >= SEARCH_VISIT_BUDGET || matches.length >= MAX_MATCHES) break;
-        const frame = stack[stack.length - 1];
-        if (frame.next >= frame.node.count) {
-          stack.pop();
-          continue;
+      if (needles.length && root) {
+        if (nodeMatches(root, needles)) matches.push([]);
+        const stack = [{ node: root, next: 0, path: [] }];
+        let visits = 0;
+        while (stack.length) {
+          if (visits >= SEARCH_VISIT_BUDGET || matches.length >= MAX_MATCHES) break;
+          const frame = stack[stack.length - 1];
+          if (frame.next >= frame.node.count) {
+            stack.pop();
+            continue;
+          }
+          const index = frame.next;
+          frame.next += 1;
+          visits += 1;
+          const child = childAt(frame.node, index);
+          const path = frame.path.concat(index);
+          if (nodeMatches(child, needles)) matches.push(path);
+          if (child.container) stack.push({ node: child, next: 0, path });
         }
-        const index = frame.next;
-        frame.next += 1;
-        visits += 1;
-        const child = childAt(frame.node, index);
-        const path = frame.path.concat(index);
-        if (nodeMatches(child, needles)) matches.push(path);
-        if (child.container) stack.push({ node: child, next: 0, path });
+        lastTruncated = stack.length > 0;
+        matchPaths = new Set(matches.map(path => path.join('/')));
       }
-      lastTruncated = stack.length > 0;
-      matchPaths = new Set(matches.map(path => path.join('/')));
-      // Only paint existing rows; never expand/materialize the tree to mark hits.
-      for (const li of container.querySelectorAll('.tree-node')) {
-        li.classList.toggle('tree-match', matchPaths.has(li._searchPath));
-        paintRowHits(li);
-      }
+      // Single repaint pass over existing rows; never expand/materialize the
+      // tree to mark hits. With empty needles paintRowHits unwraps, so clearing
+      // the query cannot leave stale highlight spans behind.
+      for (const li of container.querySelectorAll('.tree-node')) paintRowHits(li);
       return matches.length ? go(0) : summary(lastTruncated);
     },
 
