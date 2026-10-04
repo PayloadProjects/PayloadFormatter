@@ -114,15 +114,16 @@ export function childAt(node, index) {
 }
 
 // Users routinely paste values copied from formatted JSON/XML, quotes included
-// ("email": "user1@example.com" copies as "user1@example.com"). Keep the literal
+// ("email": "user1@example.com" copies as "user1@example.com" — or as a
+// fragment like `"housecash` when they grab it mid-typing). Keep the literal
 // query and add the de-quoted variant as an extra candidate: stripping only
-// ever widens the search, never narrows it.
+// ever widens the search, never narrows it. Quotes are stripped from either
+// end independently, so lone leading/trailing quotes work, not just pairs.
 export function searchNeedles(query) {
   const base = String(query || '').trim().toLowerCase();
   if (!base) return [];
-  const unwrapped = base.match(/^(['"])([\s\S]*)\1$/);
-  const inner = unwrapped ? unwrapped[2].trim() : '';
-  return inner ? [base, inner] : [base];
+  const inner = base.replace(/^['"]+|['"]+$/g, '').trim();
+  return inner && inner !== base ? [base, inner] : [base];
 }
 
 export function nodeMatches(node, needles) {
