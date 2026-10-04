@@ -1,16 +1,18 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [html, css, editorCss, app, editorJs] = await Promise.all(
-  ['index.html', 'style.css', 'text-editor.css', 'app.js', 'text-editor.js']
+const [html, css, editorCss, app, editorJs, treeCss] = await Promise.all(
+  ['index.html', 'style.css', 'text-editor.css', 'app.js', 'text-editor.js', 'tree-view.css']
     .map((file) => readFile(new URL(file, import.meta.url), 'utf8')),
 );
 
 // The Wrap control lives next to the payload type badge in the editor strip.
-const stripMeta = html.match(/<div class="editor-strip-meta"[^>]*>([\s\S]*?)<\/div>/)?.[1];
+// The strip-meta block nests the tree actions div, so capture through its close.
+const stripMeta = html.match(/<div class="editor-strip-meta"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/)?.[1];
 assert.ok(stripMeta, 'editor strip meta exists');
 assert.deepEqual([...stripMeta.matchAll(/<(?:button|span)\b[^>]*id="([^"]+)"/g)].map((m) => m[1]),
-  ['wrapToggleBtn', 'typeBadge'], 'Wrap sits before the type badge');
+  ['wrapToggleBtn', 'treeExpandAll', 'treeCollapseAll', 'typeBadge'],
+  'Wrap, tree actions and badge sit in that order');
 assert.match(stripMeta, /id="wrapToggleBtn"[^>]*aria-pressed="false"/,
   'wrap toggle starts unpressed');
 assert.match(stripMeta, /title="Wrap long lines \(syntax colors pause while wrap is on\)"/,
@@ -78,9 +80,26 @@ assert.match(editorCss, /\.syntax-gutter \{[^}]*padding: 12px 8px 12px 0;/,
   'gutter padding tracks the editor padding');
 
 // Cache-busted asset versions cover every touched file.
-for (const asset of ['style.css', 'text-editor.css', 'app.js']) {
+for (const asset of ['style.css', 'text-editor.css', 'tree-view.css', 'app.js']) {
   assert.match(html, new RegExp(`\\./${asset.replace('.', '\\.')}\\?v=wrap-compact-v1`),
     `${asset} carries the new cache-busting version`);
 }
+
+// Single editor strip: view toggle, tree search, wrap, tree actions and badge
+// share one row; the old second tree-tools row is gone.
+const strip = html.match(/<div class="editor-strip"[^>]*>([\s\S]*?)<\/div>\s*<div class="editor-body"/)?.[1];
+assert.ok(strip, 'single editor strip exists');
+for (const id of ['viewTextBtn', 'viewTreeBtn', 'treeSearch', 'treePrev', 'treeNext',
+  'treeMatchCount', 'wrapToggleBtn', 'treeExpandAll', 'treeCollapseAll', 'typeBadge']) {
+  assert.ok(strip.includes(`id="${id}"`), `${id} lives in the single strip`);
+}
+assert.ok(!html.includes('tree-tools'), 'the second tree-tools row is gone');
+assert.ok(!html.includes('editor-strip-left'), 'the strip has no leftover left wrapper');
+assert.match(treeCss, /\.editor-frame\[data-view="tree"\] \[data-view-scope="text"\]/,
+  'text-only controls hide in tree view');
+assert.match(treeCss, /\.editor-frame:not\(\[data-view="tree"\]\) \[data-view-scope="tree"\]/,
+  'tree-only controls hide in text view');
+assert.match(treeCss, /\.tree-strip-search \{[^}]*flex: 1 1 200px;/,
+  'tree search grows inside the single strip');
 
 console.log('All word-wrap and compact-chrome regression tests passed.');

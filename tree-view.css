@@ -1,12 +1,5 @@
 /* ---- Tree view (loaded after style.css; uses its theme tokens) ---- */
 
-.editor-strip-left {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
 .view-toggle {
   display: inline-flex;
   padding: 2px;
@@ -48,6 +41,14 @@
   display: none;
 }
 
+/* The single editor strip shows only the controls for the active view. */
+.editor-frame[data-view="tree"] [data-view-scope="text"] {
+  display: none;
+}
+.editor-frame:not([data-view="tree"]) [data-view-scope="tree"] {
+  display: none;
+}
+
 .tree-panel {
   min-height: 0;
   flex: 1;
@@ -56,15 +57,12 @@
   background: var(--editor-bg);
 }
 
-.tree-tools {
-  flex: 0 0 auto;
-  padding: 8px 12px;
+.tree-strip-search {
+  min-width: 0;
+  flex: 1 1 200px;
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 6px;
-  border-bottom: 1px solid var(--panel-border);
-  background: var(--strip-bg);
 }
 
 .tree-search {
@@ -91,7 +89,8 @@
   box-shadow: 0 0 0 1px var(--editor-focus);
 }
 
-.tree-tools button {
+.tree-strip-search button,
+.tree-actions button {
   min-height: 32px;
   padding: 4px 9px;
   font-size: 11px;
@@ -102,10 +101,6 @@
   color: var(--muted);
   font-size: 11px;
   white-space: nowrap;
-}
-
-.tree-tools-spacer {
-  flex: 1 1 0;
 }
 
 .tree-view {
@@ -280,9 +275,14 @@
 }
 
 @media (max-width: 520px) {
-  .editor-strip-left {
-    width: 100%;
-    justify-content: space-between;
+  .editor-strip {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .tree-strip-search {
+    flex: 1 1 100%;
+    order: 3;
   }
 
   .tree-search {
@@ -302,7 +302,6 @@
   flex: 0 0 auto;
   align-items: center;
   gap: 6px;
-  margin-left: auto;
 }
 .tree-actions button { white-space: nowrap; }
 .tree-key, .tree-tag { font-weight: 550; }
@@ -327,9 +326,8 @@
 
 @media (hover: none) { .tree-copy { opacity: 1; } }
 @media (max-width: 520px) {
-  .editor-strip-left { width: auto; }
-  .tree-tools { padding: 6px 8px; gap: 4px; }
-  .tree-search { min-width: 0; flex-basis: 100%; width: 100%; }
+  .tree-strip-search { gap: 4px; }
+  .tree-search { min-width: 0; }
   .tree-match-count { font-size: 10px; }
-  .tree-tools button { min-height: 34px; }
+  .tree-strip-search button, .tree-actions button { min-height: 34px; }
 }

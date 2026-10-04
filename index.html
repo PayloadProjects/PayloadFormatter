@@ -31,7 +31,7 @@
     </script>
     <title>JSON/XML Formatter</title>
     <link rel="stylesheet" href="./style.css?v=wrap-compact-v1" />
-    <link rel="stylesheet" href="./tree-view.css?v=readability-v1" />
+    <link rel="stylesheet" href="./tree-view.css?v=wrap-compact-v1" />
     <link rel="stylesheet" href="./text-editor.css?v=wrap-compact-v1" />
   </head>
   <body>
@@ -64,20 +64,37 @@
       <section class="workspace" aria-label="JSON/XML formatter">
         <div id="editorFrame" class="editor-frame" data-view="text">
           <div class="editor-strip">
-            <div class="editor-strip-left">
-              <div class="view-toggle" role="group" aria-label="Payload view">
-                <button id="viewTextBtn" type="button" aria-pressed="true">Text</button>
-                <button id="viewTreeBtn" type="button" aria-pressed="false">Tree</button>
-              </div>
+            <div class="view-toggle" role="group" aria-label="Payload view">
+              <button id="viewTextBtn" type="button" aria-pressed="true">Text</button>
+              <button id="viewTreeBtn" type="button" aria-pressed="false">Tree</button>
+            </div>
+            <div class="tree-strip-search" data-view-scope="tree">
+              <input
+                id="treeSearch"
+                class="tree-search"
+                type="search"
+                placeholder="Search keys and values…"
+                aria-label="Search the tree"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <button id="treePrev" type="button" title="Previous match" aria-label="Previous tree search match">↑</button>
+              <button id="treeNext" type="button" title="Next match" aria-label="Next tree search match">↓</button>
+              <span id="treeMatchCount" class="tree-match-count" aria-live="polite"></span>
             </div>
             <div class="editor-strip-meta">
               <button
                 id="wrapToggleBtn"
                 class="strip-btn"
                 type="button"
+                data-view-scope="text"
                 aria-pressed="false"
                 title="Wrap long lines (syntax colors pause while wrap is on)"
               >Wrap</button>
+              <div class="tree-actions" role="group" aria-label="Tree actions" data-view-scope="tree">
+                <button id="treeExpandAll" type="button">Expand all</button>
+                <button id="treeCollapseAll" type="button">Collapse all</button>
+              </div>
               <span id="typeBadge" class="type-badge" aria-live="polite">Waiting for payload</span>
             </div>
           </div>
@@ -113,24 +130,6 @@
           </div>
 
           <div id="treePanel" class="tree-panel">
-            <div class="tree-tools">
-              <input
-                id="treeSearch"
-                class="tree-search"
-                type="search"
-                placeholder="Search keys and values…"
-                aria-label="Search the tree"
-                autocomplete="off"
-                spellcheck="false"
-              />
-              <button id="treePrev" type="button" title="Previous match" aria-label="Previous tree search match">↑</button>
-              <button id="treeNext" type="button" title="Next match" aria-label="Next tree search match">↓</button>
-              <span id="treeMatchCount" class="tree-match-count" aria-live="polite"></span>
-              <div class="tree-actions" role="group" aria-label="Tree actions">
-                <button id="treeExpandAll" type="button">Expand all</button>
-                <button id="treeCollapseAll" type="button">Collapse all</button>
-              </div>
-            </div>
             <div id="treeView" class="tree-view" tabindex="-1"></div>
           </div>
         </div>
