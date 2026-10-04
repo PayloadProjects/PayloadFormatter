@@ -140,7 +140,7 @@ export function createTreeController({ getText, detectMode, setStatus, nextPaint
 
     hasTree = false;
     if (!text) {
-      tree.clear('Nothing to show yet. Paste JSON or XML to see its tree.');
+      tree.clear('Nothing to show yet. Click anywhere in the panel to paste & format.');
       setTools(false);
       showCount(null, '');
       return;

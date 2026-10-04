@@ -149,6 +149,26 @@ function installGlobals(dom) {
     'denied clipboard shows the manual-paste guidance',
   );
   assert.equal(editor.value, '', 'nothing pasted when the clipboard is denied');
+
+  // Tree view: the empty state teaches the gesture, and clicking the empty
+  // tree panel pastes (the click bubbles to .editor-body).
+  editor.value = '';
+  editor.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  await sleep(450);
+  doc.querySelector('#viewTextBtn').click();
+  await sleep(50);
+  doc.querySelector('#viewTreeBtn').click();
+  await sleep(100);
+  assert.ok(
+    doc.querySelector('#treeView').textContent.includes('Click anywhere in the panel'),
+    'tree empty state teaches click-to-paste',
+  );
+  dom.window.navigator.clipboard = {
+    readText: async () => '{"fromTree":1}',
+  };
+  doc.querySelector('#treeView').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+  await sleep(400);
+  assert.equal(editor.value, '{"fromTree":1}', 'clicking the empty tree panel pastes');
 }
 
 console.log('All extreme-load guard tests passed.');
