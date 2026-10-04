@@ -53,19 +53,54 @@ function installGlobals(dom) {
   await sleep(100);
   assert.equal(controller.hasTree(), true, 'small payload builds the tree');
 
-  payload = 'x'.repeat(3 * 1024 * 1024); // 3MB of non-JSON; mode forced to json
+  payload = 'x'.repeat(12 * 1024 * 1024); // 12MB of non-JSON; mode forced to json
   controller.setView('text');
   controller.setView('tree');
   await sleep(100);
   assert.equal(controller.hasTree(), false, 'oversize payload does not build a tree');
   const treeText = dom.window.document.querySelector('#treeView').textContent;
-  assert.ok(treeText.includes('2 MB'), 'refusal states the cap');
-  assert.ok(treeText.includes('3.0 MB'), 'refusal states the actual size');
+  assert.ok(treeText.includes('10 MB'), 'refusal states the cap');
+  assert.ok(treeText.includes('12.0 MB'), 'refusal states the actual size');
   assert.ok(treeText.includes('Text view'), 'refusal names the way out');
   assert.ok(
     statuses.some(([text, kind]) => text.includes('too large') && kind === 'warning'),
     'status warns instead of failing silently',
   );
+}
+
+// --- 1b. Tree view builds a ~9MB payload within budget ----------------------
+// Positive probe for the raised 10MB tree cap: the model build + initial chunked
+// render must complete without hanging (the failure mode the 2MB cap guarded).
+{
+  const dom = new JSDOM(html, { url: 'http://localhost/', pretendToBeVisual: true });
+  installGlobals(dom);
+  const { createTreeController } = await import('./tree-controller.js?guards=1b');
+
+  // ~9MB of JSON: an array of small objects (~150k nodes as data).
+  const item = '{"id":123456,"name":"payload-item-abcdef","active":true,"tags":["a","b"]}';
+  const count = Math.ceil((9 * 1024 * 1024) / (item.length + 1));
+  const payload = '[' + new Array(count).fill(item).join(',') + ']';
+  assert.ok(payload.length > 8 * 1024 * 1024 && payload.length < 10 * 1024 * 1024,
+    `probe payload is ~9MB (was ${(payload.length / 1048576).toFixed(1)}MB)`);
+
+  const controller = createTreeController({
+    getText: () => payload,
+    detectMode: () => 'json',
+    setStatus: () => {},
+    nextPaint: () => Promise.resolve(),
+    onFormat: () => {},
+    onPasteText: () => {},
+  });
+
+  const started = Date.now();
+  controller.setView('tree');
+  await sleep(2500);
+  const elapsed = Date.now() - started;
+  assert.equal(controller.hasTree(), true, '9MB payload builds a tree under the 10MB cap');
+  assert.ok(elapsed < 15000, `tree build + initial render finished in budget (${elapsed}ms)`);
+  const rows = dom.window.document.querySelectorAll('#treeView .tree-row').length;
+  assert.ok(rows > 0 && rows <= 1000,
+    `initial render stays chunk-sized (${rows} rows for ~${count.toLocaleString()} items)`);
 }
 
 // --- 2. Paste size ceiling -------------------------------------------------

@@ -6,8 +6,8 @@
 // but navigation skips empty entries: Back/Forward always lands on a real
 // pasted payload, never on the blank left behind by a clear.
 // Session-only by design: the draft already persists the latest payload.
-const DEFAULT_MAX_ENTRIES = 25;
-const DEFAULT_MAX_BYTES = 8 * 1024 * 1024;
+const DEFAULT_MAX_ENTRIES = 100;
+const DEFAULT_MAX_BYTES = 32 * 1024 * 1024;
 
 export function createPayloadHistory({ maxEntries = DEFAULT_MAX_ENTRIES, maxBytes = DEFAULT_MAX_BYTES } = {}) {
   let entries = [];
