@@ -4,7 +4,7 @@ const VIEW_STORAGE_KEY = 'payload-formatter:view:v1';
 const LARGE_TREE_CHARS = 512 * 1024;
 // Hard ceiling: above this the tree would try to build hundreds of thousands
 // of DOM nodes and hang the tab. Text view stays available for any size.
-const MAX_TREE_CHARS = 2 * 1024 * 1024;
+const MAX_TREE_CHARS = 10 * 1024 * 1024;
 
 // Connects the Text/Tree toggle, the tree toolbar and the tree itself to the
 // rest of the app. app.js supplies the payload and the formatter; this module

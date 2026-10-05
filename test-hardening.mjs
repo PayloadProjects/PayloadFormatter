@@ -204,7 +204,13 @@ import { createWindowManager } from './window-manager.js';
 
   doc.querySelector('#historyBackBtn').click();
   await sleep(50);
-  assert.equal(editor.value, '{"a":1}', 'back reaches the first payload');
+  assert.equal(editor.value, '{"c":3}', 'back steps to the pre-edit entry');
+  doc.querySelector('#historyBackBtn').click();
+  await sleep(50);
+  assert.equal(editor.value, '{"a":1}', 'back again reaches the first payload');
+  doc.querySelector('#historyForwardBtn').click();
+  await sleep(50);
+  assert.equal(editor.value, '{"c":3}', 'forward steps back through the edits');
   doc.querySelector('#historyForwardBtn').click();
   await sleep(50);
   assert.equal(
@@ -250,6 +256,72 @@ import { createWindowManager } from './window-manager.js';
   assert.equal(draft, '{"fresh":true}', 'pagehide flushed the draft synchronously');
   void app;
   void sleep;
+}
+
+// --- Boot: Back steps through edits, then pastes (integrated history) ----
+// The requested UX: every debounced edit is its own history stop, so Back
+// walks B-edit2 -> B-edit1 -> B-original -> A with no separate snapshot step.
+{
+  const html = await readFile(new URL('index.html', import.meta.url), 'utf8');
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const dom = new JSDOM(html, { url: 'http://localhost/', pretendToBeVisual: true });
+  for (const key of ['window', 'document', 'sessionStorage', 'localStorage',
+    'requestAnimationFrame', 'cancelAnimationFrame', 'matchMedia', 'getComputedStyle',
+    'Node', 'Element', 'HTMLElement', 'CustomEvent', 'Event', 'KeyboardEvent',
+    'MutationObserver']) {
+    if (dom.window[key] !== undefined) {
+      try { globalThis[key] = dom.window[key]; } catch (_) {}
+    }
+  }
+  globalThis.addEventListener = dom.window.addEventListener.bind(dom.window);
+  globalThis.removeEventListener = dom.window.removeEventListener.bind(dom.window);
+  globalThis.Worker = class { constructor() { throw new Error('no worker in test'); } };
+  globalThis.ResizeObserver = class {
+    constructor() {} observe() {} unobserve() {} disconnect() {}
+  };
+  const app = await import('./app.js?hardening-editsteps=1');
+  await app.__historyHydrated();
+  const doc = dom.window.document;
+  const editor = doc.querySelector('#payloadInput');
+  const pasteText = async (text) => {
+    const paste = new dom.window.Event('paste', { bubbles: true, cancelable: true });
+    paste.clipboardData = { getData: () => text };
+    editor.dispatchEvent(paste);
+    editor.value = text;
+    editor.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    await sleep(450);
+  };
+  const typeText = async (text) => {
+    editor.value = text;
+    editor.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    await sleep(450); // let the debounce record this edit as its own entry
+  };
+  const back = doc.querySelector('#historyBackBtn');
+  const forward = doc.querySelector('#historyForwardBtn');
+  const goBack = async () => { back.click(); await sleep(50); };
+  const goForward = async () => { forward.click(); await sleep(50); };
+
+  await pasteText('{"a":1}');
+  await pasteText('{"b":1}');
+  await typeText('{"b":2}');
+  await typeText('{"b":3}');
+
+  await goBack();
+  assert.equal(editor.value, '{"b":2}', 'back: edit2 -> edit1');
+  await goBack();
+  assert.equal(editor.value, '{"b":1}', 'back: edit1 -> original paste');
+  await goBack();
+  assert.equal(editor.value, '{"a":1}', 'back: original -> previous paste');
+  assert.equal(back.disabled, true, 'back disabled at the oldest entry');
+
+  await goForward();
+  assert.equal(editor.value, '{"b":1}', 'forward: previous paste -> original');
+  await goForward();
+  assert.equal(editor.value, '{"b":2}', 'forward: original -> edit1');
+  await goForward();
+  assert.equal(editor.value, '{"b":3}', 'forward: edit1 -> edit2');
+  assert.equal(forward.disabled, true, 'forward disabled at the newest entry');
+  void app;
 }
 
 console.log('test-hardening: all assertions passed');

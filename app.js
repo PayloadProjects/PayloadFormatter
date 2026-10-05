@@ -9,6 +9,7 @@ import {
   loadWindowHistories,
   deleteWindowHistory,
   cleanupStaleHistories,
+  requestPersistence,
 } from './history-store.js';
 
 const STORAGE_KEY = 'payload-formatter:draft:v1';
@@ -17,12 +18,17 @@ const WINDOW_DRAFT_PREFIX = 'payload-formatter:window-draft:';
 const THEME_STORAGE_KEY = 'payload-formatter:theme:v1';
 const WRAP_STORAGE_KEY = 'payload-formatter:wrap:v1';
 const MAX_DRAFT_BYTES = 2 * 1024 * 1024;
+// History entries persist to IndexedDB up to this size, stored as Blobs past
+// 2MB (see history-store.js). Larger than the draft cap on purpose:
+// sessionStorage is synchronous with a ~5MB quota, while IndexedDB quotas
+// are in the GB range and writes are async.
+const MAX_HISTORY_PERSIST_BYTES = 20 * 1024 * 1024;
 // Hard ceiling for a single payload: above this the tab risks an out-of-memory
 // crash (the string, its formatted copy, and worker clones add up fast).
 // Refused up front with an honest message instead of dying mid-paste.
 const HARD_MAX_PAYLOAD_CHARS = 100 * 1024 * 1024;
 const LARGE_UI_PAYLOAD_CHARS = 512 * 1024;
-const LARGE_PAYLOAD_CHARS = 2 * 1024 * 1024;
+const LARGE_PAYLOAD_CHARS = 10 * 1024 * 1024;
 const PREVIEW_CHARS = 120_000;
 const BASE_FORMAT_TIMEOUT_MS = 30_000;
 const FORMAT_TIMEOUT_PER_MB_MS = 5_000;
@@ -84,6 +90,7 @@ const treeController = createTreeController({
 initializeTheme();
 initializeWrap();
 initEpochPopover();
+requestPersistence();
 restoreWindows();
 // History arrives asynchronously from IndexedDB; the windows above boot
 // synchronously from sessionStorage so the UI is never blocked on it.
@@ -318,12 +325,13 @@ function persistPayloadFor(win, text, isLarge) {
 
 // Persists one window's paste history (entries + position) to IndexedDB.
 // Fire-and-forget: a storage failure degrades to session-only history and
-// never risks the visible payload. Oversize entries are dropped, matching
-// the rule that large payloads are never persisted.
+// never risks the visible payload. Entries above MAX_HISTORY_PERSIST_BYTES
+// are dropped (the store keeps the survivors as Blobs past 2MB); the index
+// is remapped to the nearest surviving entry.
 function saveHistoryFor(win) {
   if (!win || !win.history) return;
   const snapshot = win.history.toPersistable(
-    (text) => text.length <= MAX_DRAFT_BYTES && utf8ByteLength(text) <= MAX_DRAFT_BYTES,
+    (text) => text.length <= MAX_HISTORY_PERSIST_BYTES && utf8ByteLength(text) <= MAX_HISTORY_PERSIST_BYTES,
   );
   const task = saveWindowHistory(tabId, win.id, snapshot);
   pendingHistorySaves.add(task);
@@ -355,6 +363,17 @@ async function hydrateWindowHistories() {
         continue;
       }
       win.history.restore(record);
+      // A window whose draft didn't survive (over the 2MB sessionStorage cap)
+      // still gets its payload back when history persisted it: seed from the
+      // restored position. A paste during hydration wins via the revision
+      // guard above, and a seeded draft (payload non-empty) is left alone.
+      if (!win.payload && win.history.size() > 0) {
+        const text = win.history.current();
+        if (text) {
+          win.payload = text;
+          if (win === activeWindow) setPayloadText(text);
+        }
+      }
     }
     syncHistoryNav();
   } finally {
@@ -520,12 +539,12 @@ function scheduleHistoryUpdate() {
 // Extracted so window switches can flush it synchronously: otherwise a fast
 // switch lets the timer fire against the NEW window and the old window's
 // history never learns the typed text.
+// Typing records a NEW entry per pause (not an in-place rewrite), so Back
+// steps through edits: [A, B, B-edit1, B-edit2] -> Back -> B-edit1 -> B -> A.
+// push() ignores consecutive duplicates, so idle debounce fires are no-ops.
 function applyHistoryUpdate() {
   if (!activeWindow || !history) return;
-  if (history.updateCurrent(getPayloadText())) {
-    syncHistoryNav();
-    saveHistoryFor(activeWindow);
-  }
+  pushHistory();
 }
 
 function syncHistoryNav() {

@@ -4,7 +4,7 @@
 // open instantly and the DOM stays small. The model half (parseTree/childAt)
 // has no DOM dependency beyond DOMParser for XML, which keeps it unit-testable.
 
-export const TREE_MAX_CHARS = { json: 20_000_000, xml: 8_000_000 };
+export const TREE_MAX_CHARS = { json: 20_000_000, xml: 10_000_000 };
 
 const CHUNK_SIZE = 200;
 const AUTO_OPEN_MAX_CHILDREN = 25;
