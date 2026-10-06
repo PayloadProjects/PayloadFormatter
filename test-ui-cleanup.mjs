@@ -27,6 +27,14 @@ assert.ok(treeCss.includes('background: var(--selected-bg)'));
 assert.ok(treeCss.includes('color: var(--heading)'));
 assert.ok(css.includes('prefers-reduced-motion'));
 
+// The action buttons are pinned left beside the history nav: the toolbar
+// must not center them (space-between), or a changing status message on
+// the right would shift them around.
+assert.match(css, /\.toolbar \{[^}]*justify-content: flex-start;/,
+  'toolbar pins its groups left instead of centering the actions');
+assert.match(css, /\.status-area \{[^}]*margin-left: auto;/,
+  'status area holds the right edge so the buttons never move');
+
 // Frequent actions are ordinary visible toolbar buttons, never a disclosure.
 const treeActions = html.match(/<div class="tree-actions"[^>]*>([\s\S]*?)<\/div>/)?.[1];
 assert.ok(treeActions, 'tree actions have an inline toolbar group');
