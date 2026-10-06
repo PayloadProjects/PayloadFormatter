@@ -547,6 +547,34 @@ __clearMemoryBackend();
   assert.equal(editorB.value, five, '5MB payload seeded into the editor from persisted history');
   assert.equal(editorB.readOnly, false, 'restored 5MB payload stays editable');
 }
+
+// --- Persistent storage is requested in context, never at boot ------------
+{
+  const dom = new JSDOM(html, { url: 'http://localhost/', pretendToBeVisual: true });
+  installGlobals(dom);
+  let persistCalls = 0;
+  Object.defineProperty(dom.window.navigator, 'storage', {
+    value: { persist: () => { persistCalls += 1; return Promise.resolve(true); } },
+    configurable: true,
+  });
+  const app = await import('./app.js?history-persist=11');
+  await app.__historyHydrated();
+  assert.equal(persistCalls, 0, 'boot never asks for persistent storage');
+  const editor = dom.window.document.querySelector('#payloadInput');
+
+  await ctrlVPaste(dom, editor, '{"small":1}');
+  await app.__flushHistorySaves();
+  assert.equal(persistCalls, 0, 'small payloads never trigger the request');
+
+  const big = 'x'.repeat(3 * 1024 * 1024);
+  await ctrlVPaste(dom, editor, big);
+  await app.__flushHistorySaves();
+  assert.equal(persistCalls, 1, 'first large persist requests persistent storage');
+
+  await ctrlVPaste(dom, editor, `${big}y`);
+  await app.__flushHistorySaves();
+  assert.equal(persistCalls, 1, 'requested only once per session');
+}
 __clearMemoryBackend();
 
 console.log('All history persistence tests passed.');

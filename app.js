@@ -90,7 +90,6 @@ const treeController = createTreeController({
 initializeTheme();
 initializeWrap();
 initEpochPopover();
-requestPersistence();
 restoreWindows();
 // History arrives asynchronously from IndexedDB; the windows above boot
 // synchronously from sessionStorage so the UI is never blocked on it.
@@ -323,6 +322,12 @@ function persistPayloadFor(win, text, isLarge) {
   writeWindowDraft(win.id, text);
 }
 
+// Persistent storage is requested in context, not at boot: the first time a
+// large entry is persisted — something actually worth protecting, when the
+// browser's permission prompt makes sense. Once per session at most; the
+// browser remembers the decision per origin afterwards.
+let persistenceRequested = false;
+
 // Persists one window's paste history (entries + position) to IndexedDB.
 // Fire-and-forget: a storage failure degrades to session-only history and
 // never risks the visible payload. Entries above MAX_HISTORY_PERSIST_BYTES
@@ -333,6 +338,10 @@ function saveHistoryFor(win) {
   const snapshot = win.history.toPersistable(
     (text) => text.length <= MAX_HISTORY_PERSIST_BYTES && utf8ByteLength(text) <= MAX_HISTORY_PERSIST_BYTES,
   );
+  if (!persistenceRequested && snapshot.entries.some((text) => text.length > MAX_DRAFT_BYTES)) {
+    persistenceRequested = true;
+    requestPersistence();
+  }
   const task = saveWindowHistory(tabId, win.id, snapshot);
   pendingHistorySaves.add(task);
   const done = () => pendingHistorySaves.delete(task);
