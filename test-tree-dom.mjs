@@ -71,6 +71,42 @@ assert.equal(nested().length, 0, 'still no nested spans after re-render');
 // The new test file is wired into the suite.
 const pkg = JSON.parse(await readFile(new URL('./package.json', import.meta.url), 'utf8'));
 assert.ok(pkg.scripts.test.includes('test-tree-dom.mjs'), 'npm test runs the DOM tests');
+// --- Expansion snapshot: openPaths() captures, restoreOpen() brings back ---
+{
+  const box = document.createElement('div');
+  document.body.appendChild(box);
+  const tree = createTreeView(box, { onCopyPath() {} });
+  const nested = JSON.stringify({ a: { b: { c: 1 } }, d: [1, 2, 3] });
+  assert.ok(tree.show(nested, 'json').ok, 'nested tree renders');
+
+  const openCount = () => box.querySelectorAll('.tree-node.open').length;
+  const clickRow = (row) => row.dispatchEvent(new dom.window.Event('click', { bubbles: true }));
+  // Small trees auto-open the root's children (AUTO_OPEN_MAX_CHILDREN).
+  assert.equal(openCount(), 3, 'root and its two children start open');
+
+  // Expand a.b: rows render in DOM order root, a, b, d.
+  const rows = [...box.querySelectorAll('.tree-row')];
+  clickRow(rows[2]); // b
+  assert.equal(openCount(), 4, 'a.b is now open too');
+
+  const paths = tree.openPaths();
+  assert.deepEqual(paths, [[], [0], [0, 0], [1]], 'openPaths captures index-paths from the root');
+
+  // Rebuild collapses to the auto-open state (the window-switch case); restore brings it back.
+  assert.ok(tree.show(nested, 'json').ok, 'rebuild succeeds');
+  assert.equal(openCount(), 3, 'rebuild returns to the auto-open state');
+  tree.restoreOpen(paths);
+  assert.equal(openCount(), 4, 'restoreOpen re-expands the captured nodes');
+  assert.equal(box.querySelectorAll('.tree-row').length, 8, 'restored children render again');
+
+  // Garbage paths fail soft: unknown branches stop, the rest still restore.
+  tree.show(nested, 'json');
+  tree.restoreOpen([[99], [0, 0], 'nope', null]);
+  assert.equal(openCount(), 4, 'valid path [0,0] (a.b) restores despite bad siblings');
+  tree.restoreOpen('nope');
+  assert.equal(openCount(), 4, 'non-array snapshot is a no-op');
+}
+
 assert.ok(!(pkg.dependencies && pkg.dependencies.jsdom), 'jsdom stays a dev-only dependency');
 
 console.log('All tree search DOM lifecycle tests passed.');

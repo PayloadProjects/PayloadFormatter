@@ -27,6 +27,16 @@ export function createWindowManager() {
     return getWindow(activeId) || windows[0] || null;
   }
 
+  // Per-window UI state: where the user left the window (text scroll and
+  // cursor, tree scroll and expansion). Ephemeral — never serialized; a
+  // fresh session starts every window at the top.
+  function freshUiState() {
+    return {
+      text: { scrollTop: 0, scrollLeft: 0, selStart: 0, selEnd: 0 },
+      tree: { scrollTop: 0, openPaths: [] },
+    };
+  }
+
   // Creates a window (does not activate it); returns null at the cap.
   // The history starts seeded with the initial payload when there is one.
   function newWindow(name, payload = '') {
@@ -38,6 +48,7 @@ export function createWindowManager() {
       name: cleanName(name) || `Window ${counter}`,
       payload: text,
       history: createPayloadHistory(),
+      ui: freshUiState(),
     };
     if (text) win.history.push(text);
     windows.push(win);
@@ -55,6 +66,7 @@ export function createWindowManager() {
       name: cleanName(name) || 'Window',
       payload: text,
       history: createPayloadHistory(),
+      ui: freshUiState(),
     };
     if (text) win.history.push(text);
     windows.push(win);
@@ -96,6 +108,19 @@ export function createWindowManager() {
     return { closed: true, removed, activateId };
   }
 
+  // Reorders a window: removes it and reinserts at toIndex (clamped into
+  // range, so toIndex may be an insertion point past the end). The index is
+  // interpreted after removal, matching drag-and-drop insertion math.
+  // Returns true when the order actually changed.
+  function moveWindow(id, toIndex) {
+    const from = windows.findIndex((win) => win.id === id);
+    if (from < 0) return false;
+    const [win] = windows.splice(from, 1);
+    const clamped = Math.max(0, Math.min(toIndex, windows.length));
+    windows.splice(clamped, 0, win);
+    return clamped !== from;
+  }
+
   function toJSON() {
     return {
       windows: windows.map((win) => ({ id: win.id, name: win.name })),
@@ -113,6 +138,7 @@ export function createWindowManager() {
     setCounter,
     renameWindow,
     closeWindow,
+    moveWindow,
     toJSON,
     get windows() { return windows; },
     get activeId() { return activeId; },

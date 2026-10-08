@@ -85,6 +85,10 @@ const treeController = createTreeController({
   nextPaint,
   onFormat: formatPayload,
   onPasteText: pasteTextAndFormat,
+  // Leaving tree view for text view: snapshot the expansion/scroll so a
+  // later window switch (or return to tree view) restores it.
+  onTreeHide: () => { if (activeWindow) stashTreeUi(activeWindow); },
+  getTreeRestore: () => activeWindow?.ui.tree,
 });
 
 initializeTheme();
@@ -176,6 +180,118 @@ windowTabs?.addEventListener('dblclick', (event) => {
   const tab = event.target.closest('.window-tab');
   if (tab) startRename(tab);
 });
+
+// Drag-and-drop tab reordering (HTML5 DnD) plus Alt+Arrow keyboard moves.
+// The drop indicator lives on .window-bar (never re-rendered) so
+// renderWindowBar's replaceChildren() cannot destroy it mid-drag.
+const windowBar = document.querySelector('.window-bar');
+const dropIndicator = document.createElement('div');
+dropIndicator.className = 'tab-drop-indicator';
+dropIndicator.hidden = true;
+windowBar?.append(dropIndicator);
+
+let draggedWindowId = null;
+
+function hideDropIndicator() {
+  dropIndicator.hidden = true;
+}
+
+// Insertion index for a drop at clientX, computed against the tabs EXCLUDING
+// the dragged one (it still occupies a DOM slot while being dragged).
+function dropInsertionIndex(clientX) {
+  const tabs = [...windowTabs.querySelectorAll('.window-tab')]
+    .filter((tab) => tab.dataset.windowId !== draggedWindowId);
+  for (let i = 0; i < tabs.length; i += 1) {
+    const rect = tabs[i].getBoundingClientRect();
+    if (clientX < rect.left + rect.width / 2) return i;
+  }
+  return tabs.length;
+}
+
+function showDropIndicator(index) {
+  const tabs = [...windowTabs.querySelectorAll('.window-tab')]
+    .filter((tab) => tab.dataset.windowId !== draggedWindowId);
+  const barRect = windowBar.getBoundingClientRect();
+  let x;
+  if (index < tabs.length) {
+    x = tabs[index].getBoundingClientRect().left - barRect.left;
+  } else if (tabs.length > 0) {
+    x = tabs[tabs.length - 1].getBoundingClientRect().right - barRect.left;
+  } else {
+    hideDropIndicator();
+    return;
+  }
+  dropIndicator.style.left = `${x - 1}px`;
+  dropIndicator.hidden = false;
+}
+
+function endTabDrag() {
+  draggedWindowId = null;
+  windowTabs?.querySelector('.window-tab.is-dragging')?.classList.remove('is-dragging');
+  hideDropIndicator();
+}
+
+function focusTabSelect(id) {
+  [...windowTabs.querySelectorAll('.window-tab')]
+    .find((tab) => tab.dataset.windowId === id)
+    ?.querySelector('.window-tab-select')
+    ?.focus({ preventScroll: true });
+}
+
+windowTabs?.addEventListener('dragstart', (event) => {
+  const tab = event.target.closest('.window-tab');
+  // A rename in progress owns the tab: don't let a drag tear it away.
+  if (!tab || tab.querySelector('.window-rename-input')) {
+    event.preventDefault();
+    return;
+  }
+  draggedWindowId = tab.dataset.windowId;
+  event.dataTransfer.setData('text/plain', draggedWindowId);
+  event.dataTransfer.effectAllowed = 'move';
+  tab.classList.add('is-dragging');
+});
+
+windowTabs?.addEventListener('dragover', (event) => {
+  if (!draggedWindowId) return;
+  event.preventDefault(); // required to allow the drop
+  event.dataTransfer.dropEffect = 'move';
+  showDropIndicator(dropInsertionIndex(event.clientX));
+});
+
+windowTabs?.addEventListener('dragleave', (event) => {
+  if (!windowTabs.contains(event.relatedTarget)) hideDropIndicator();
+});
+
+windowTabs?.addEventListener('drop', (event) => {
+  event.preventDefault();
+  const id = (event.dataTransfer && event.dataTransfer.getData('text/plain')) || draggedWindowId;
+  const toIndex = dropInsertionIndex(event.clientX);
+  endTabDrag();
+  if (id && windowManager.moveWindow(id, toIndex)) {
+    renderWindowBar();
+    persistWindowList();
+    focusTabSelect(id);
+  }
+});
+
+windowTabs?.addEventListener('dragend', endTabDrag);
+
+// Keyboard reordering: Alt+Arrow moves the focused tab. HTML5 DnD has no
+// keyboard path, so tabs would otherwise be unmovable without a mouse.
+windowTabs?.addEventListener('keydown', (event) => {
+  if (!event.altKey || (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')) return;
+  const tab = event.target.closest('.window-tab');
+  if (!tab) return;
+  event.preventDefault();
+  const id = tab.dataset.windowId;
+  const from = windowManager.windows.findIndex((win) => win.id === id);
+  if (from < 0) return;
+  if (windowManager.moveWindow(id, from + (event.key === 'ArrowLeft' ? -1 : 1))) {
+    renderWindowBar();
+    persistWindowList();
+    focusTabSelect(id);
+  }
+});
 themeToggleBtn?.addEventListener('click', () => {
   applyTheme(currentTheme() === 'dark' ? 'light' : 'dark', { persist: true });
 });
@@ -240,9 +356,12 @@ function applyWrap(on, { persist = false } = {}) {
   editor.wrap = on ? 'soft' : 'off';
   if (wrapToggleBtn) {
     wrapToggleBtn.setAttribute('aria-pressed', String(on));
+    // The toggle now serves both views; describe what it does in the
+    // current one (tree rows have no syntax colors to pause).
+    const inTree = typeof treeController !== 'undefined' && treeController.isTree();
     wrapToggleBtn.title = on
-      ? 'Unwrap long lines'
-      : 'Wrap long lines (syntax colors pause while wrap is on)';
+      ? (inTree ? 'Unwrap tree rows' : 'Unwrap long lines')
+      : (inTree ? 'Wrap tree rows' : 'Wrap long lines (syntax colors pause while wrap is on)');
   }
   if (persist) {
     try { localStorage.setItem(WRAP_STORAGE_KEY, next); } catch (_) {}
@@ -390,6 +509,36 @@ async function hydrateWindowHistories() {
   }
 }
 
+// Per-window UI state: switching windows stashes where the user left the
+// outgoing window (text scroll/cursor, tree scroll/expansion) and restores
+// the incoming window's snapshot, so each window is exactly as it was left.
+function stashTextUi(win) {
+  if (!win) return;
+  const ui = win.ui.text;
+  ui.scrollTop = editor.scrollTop;
+  ui.scrollLeft = editor.scrollLeft;
+  try {
+    ui.selStart = editor.selectionStart ?? 0;
+    ui.selEnd = editor.selectionEnd ?? 0;
+  } catch (_) { /* selection APIs can throw on some input states */ }
+}
+
+function stashTreeUi(win) {
+  if (!win || !treeController.isTree()) return;
+  const treeView = document.querySelector('#treeView');
+  win.ui.tree.scrollTop = treeView ? treeView.scrollTop : 0;
+  win.ui.tree.openPaths = treeController.openPaths();
+}
+
+function restoreTextUi(win) {
+  const ui = win.ui.text;
+  editor.scrollTop = ui.scrollTop;
+  editor.scrollLeft = ui.scrollLeft;
+  try {
+    editor.setSelectionRange(ui.selStart, ui.selEnd);
+  } catch (_) { /* offsets may exceed a truncated large-mode preview */ }
+}
+
 function activateWindow(id, { stash = true } = {}) {
   const next = windowManager.getWindow(id);
   if (!next || busy) return;
@@ -401,6 +550,8 @@ function activateWindow(id, { stash = true } = {}) {
     clearTimeout(historyTimer);
     historyTimer = 0;
     applyHistoryUpdate();
+    stashTextUi(activeWindow);
+    stashTreeUi(activeWindow);
     const text = getPayloadText();
     activeWindow.payload = text;
     persistPayloadFor(activeWindow, text, inLargeMode());
@@ -408,7 +559,8 @@ function activateWindow(id, { stash = true } = {}) {
   activeWindow = next;
   history = next.history;
   windowManager.setActive(id);
-  setPayloadText(next.payload || '');
+  setPayloadText(next.payload || '', { treeRestore: next.ui.tree });
+  restoreTextUi(next);
   renderWindowBar();
   syncHistoryNav();
   persistWindowList();
@@ -467,11 +619,12 @@ function renderWindowBar() {
     tab.dataset.windowId = win.id;
     tab.setAttribute('role', 'tab');
     tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    tab.draggable = true;
 
     const select = document.createElement('button');
     select.type = 'button';
     select.className = 'window-tab-select';
-    select.title = `${win.name} — double-click to rename`;
+    select.title = `${win.name} — drag to reorder, Alt+←/→ to move, double-click to rename`;
     const name = document.createElement('span');
     name.className = 'window-tab-name';
     name.textContent = win.name;
@@ -563,7 +716,7 @@ function syncHistoryNav() {
 
 // Replaces the visible payload wholesale (history navigation, window
 // switches). No history side effects: callers manage their own entries.
-function setPayloadText(text) {
+function setPayloadText(text, { treeRestore } = {}) {
   editRevision += 1;
   if (text.length >= LARGE_PAYLOAD_CHARS) {
     enterLargeMode(text, { formatted: false });
@@ -575,7 +728,7 @@ function setPayloadText(text) {
     else refreshUi();
   }
   saveDraftNow();
-  treeController.refresh();
+  treeController.refresh(treeRestore);
 }
 
 function navigateHistory(direction) {

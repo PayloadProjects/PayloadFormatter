@@ -163,6 +163,21 @@
   background: var(--tree-hover-bg);
 }
 
+/* Word wrap for tree rows, driven by the shared Wrap toggle
+   (documentElement[data-wrap], same preference as text view). Rows become
+   multi-line and stay within the panel width instead of scrolling
+   horizontally; continuation lines align under the row start. The
+   min-width reset lets the label spans shrink inside the flex row so their
+   text can actually wrap. */
+html[data-wrap="on"] .tree-row {
+  width: auto;
+  white-space: normal;
+}
+html[data-wrap="on"] .tree-row > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .tree-row:focus-visible {
   outline: 1px solid var(--editor-focus);
   outline-offset: -1px;

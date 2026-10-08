@@ -9,7 +9,7 @@ const MAX_TREE_CHARS = 10 * 1024 * 1024;
 // Connects the Text/Tree toggle, the tree toolbar and the tree itself to the
 // rest of the app. app.js supplies the payload and the formatter; this module
 // never reads the editor directly, so large-payload mode keeps working.
-export function createTreeController({ getText, detectMode, setStatus, nextPaint, onFormat, onPasteText }) {
+export function createTreeController({ getText, detectMode, setStatus, nextPaint, onFormat, onPasteText, onTreeHide, getTreeRestore }) {
   const frame = document.querySelector('#editorFrame');
   const textBtn = document.querySelector('#viewTextBtn');
   const treeBtn = document.querySelector('#viewTreeBtn');
@@ -22,7 +22,7 @@ export function createTreeController({ getText, detectMode, setStatus, nextPaint
   const collapseBtn = document.querySelector('#treeCollapseAll');
 
   if (!frame || !textBtn || !treeBtn || !container) {
-    return { refresh: async () => {}, isTree: () => false, setView: () => {} };
+    return { refresh: async () => {}, isTree: () => false, setView: () => {}, openPaths: () => [] };
   }
 
   const tree = createTreeView(container, { onCopyPath: copyPath });
@@ -127,13 +127,17 @@ export function createTreeController({ getText, detectMode, setStatus, nextPaint
 
   function setView(next) {
     if (next !== 'tree' && next !== 'text') return;
+    if (view === 'tree' && next !== 'tree') onTreeHide?.();
     view = next;
     applyView();
     try { sessionStorage.setItem(VIEW_STORAGE_KEY, view); } catch (_) {}
-    if (view === 'tree') refresh();
+    if (view === 'tree') refresh(getTreeRestore?.());
   }
 
-  async function refresh() {
+  // Rebuilds the tree for the current payload. restore ({ openPaths,
+  // scrollTop }) re-applies a captured expansion/scroll snapshot afterwards —
+  // used when switching windows so the tree is where the user left it.
+  async function refresh(restore) {
     if (view !== 'tree') return;
     const id = ++token;
     const text = getText();
@@ -185,6 +189,10 @@ export function createTreeController({ getText, detectMode, setStatus, nextPaint
 
     hasTree = true;
     setTools(true);
+    if (restore) {
+      tree.restoreOpen(restore.openPaths);
+      if (restore.scrollTop) container.scrollTop = restore.scrollTop;
+    }
     if (search?.value.trim()) runSearch();
     else showCount(null, '');
     if (text.length >= LARGE_TREE_CHARS) setStatus('Tree ready.', 'success');
@@ -216,5 +224,6 @@ export function createTreeController({ getText, detectMode, setStatus, nextPaint
     isTree: () => view === 'tree',
     hasTree: () => hasTree,
     setView,
+    openPaths: () => tree.openPaths(),
   };
 }
