@@ -27,6 +27,16 @@ export function createWindowManager() {
     return getWindow(activeId) || windows[0] || null;
   }
 
+  // Per-window UI state: where the user left the window (text scroll and
+  // cursor, tree scroll and expansion). Ephemeral — never serialized; a
+  // fresh session starts every window at the top.
+  function freshUiState() {
+    return {
+      text: { scrollTop: 0, scrollLeft: 0, selStart: 0, selEnd: 0 },
+      tree: { scrollTop: 0, openPaths: [] },
+    };
+  }
+
   // Creates a window (does not activate it); returns null at the cap.
   // The history starts seeded with the initial payload when there is one.
   function newWindow(name, payload = '') {
@@ -38,6 +48,7 @@ export function createWindowManager() {
       name: cleanName(name) || `Window ${counter}`,
       payload: text,
       history: createPayloadHistory(),
+      ui: freshUiState(),
     };
     if (text) win.history.push(text);
     windows.push(win);
@@ -55,6 +66,7 @@ export function createWindowManager() {
       name: cleanName(name) || 'Window',
       payload: text,
       history: createPayloadHistory(),
+      ui: freshUiState(),
     };
     if (text) win.history.push(text);
     windows.push(win);

@@ -623,23 +623,30 @@ export function createTreeView(container, { onCopyPath } = {}) {
     hitLi = null;
   }
 
+  // Expands li and returns its child at index, rendering more rows on demand
+  // when the child lies beyond the current chunk or reveal window. Shared by
+  // search reveal and expansion restore.
+  function openChildAt(li, index) {
+    setOpen(li, true);
+    const start = li._windowStart || 0;
+    const visible = index >= start && index < (li._rendered || 0);
+    if (!visible) {
+      if (index + 1 > REVEAL_ROW_BUDGET) {
+        renderWindow(li, index);
+      } else {
+        // The child is within budget but outside the current window:
+        // go back to contiguous rendering, then extend to the child.
+        if (start > 0) resetContiguous(li);
+        renderChunk(li, Math.ceil((index + 1) / CHUNK_SIZE) * CHUNK_SIZE);
+      }
+    }
+    return childLiAt(li, index);
+  }
+
   function reveal(path) {
     let li = rootLi;
     for (const index of path) {
-      setOpen(li, true);
-      const start = li._windowStart || 0;
-      const visible = index >= start && index < (li._rendered || 0);
-      if (!visible) {
-        if (index + 1 > REVEAL_ROW_BUDGET) {
-          renderWindow(li, index);
-        } else {
-          // The match is within budget but outside the current window:
-          // go back to contiguous rendering, then extend to the match.
-          if (start > 0) resetContiguous(li);
-          renderChunk(li, Math.ceil((index + 1) / CHUNK_SIZE) * CHUNK_SIZE);
-        }
-      }
-      li = childLiAt(li, index);
+      li = openChildAt(li, index);
       if (!li) return;
     }
     clearHit();
@@ -651,6 +658,44 @@ export function createTreeView(container, { onCopyPath } = {}) {
 
   function summary(truncated = false) {
     return { total: matches.length, index: current, truncated };
+  }
+
+  // Index-paths (arrays of child indices from the root) of every open
+  // container node — the same shape reveal() walks. Lets a caller snapshot
+  // the expansion state (e.g. per window) and bring it back with
+  // restoreOpen() after the tree is rebuilt. Capped so expand-all on a
+  // huge tree cannot produce an unbounded snapshot.
+  const OPEN_PATH_BUDGET = 500;
+  function openPaths() {
+    if (!rootLi) return [];
+    const paths = [];
+    const walk = (li, path) => {
+      if (paths.length >= OPEN_PATH_BUDGET) return;
+      if (li.classList.contains('open')) paths.push(path);
+      const group = li._group;
+      if (!group) return;
+      for (let i = 0; i < group.children.length; i += 1) {
+        const child = group.children[i];
+        if (child._node?.container) walk(child, path.concat(i));
+      }
+    };
+    walk(rootLi, []);
+    return paths;
+  }
+
+  // Re-expands the nodes captured by openPaths(). Unknown indices (the
+  // payload changed shape) stop that branch without failing the rest.
+  function restoreOpen(paths) {
+    if (!rootLi || !Array.isArray(paths)) return;
+    for (const path of paths) {
+      if (!Array.isArray(path)) continue;
+      let li = rootLi;
+      for (const index of path) {
+        li = openChildAt(li, index);
+        if (!li) break;
+      }
+      if (li && li._node.container) setOpen(li, true);
+    }
   }
 
   let lastTruncated = false;
@@ -717,6 +762,9 @@ export function createTreeView(container, { onCopyPath } = {}) {
       for (const li of container.querySelectorAll('.tree-node.open')) setOpen(li, false);
       setOpen(rootLi, true);
     },
+
+    openPaths,
+    restoreOpen,
 
     find(query) {
       clearHit();

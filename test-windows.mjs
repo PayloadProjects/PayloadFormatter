@@ -133,6 +133,27 @@ const [html, css, app, build, pkg] = await Promise.all(
   assert.deepEqual(manager.toJSON().windows.map((win) => win.name), ['C', 'B', 'A', 'D'],
     'serialization keeps the reordered list');
 }
+
+// --- Model: per-window UI state (scroll/cursor/expansion snapshots) ---
+{
+  const manager = createWindowManager();
+  const win = manager.newWindow('A', '{"a":1}');
+  assert.deepEqual(win.ui, {
+    text: { scrollTop: 0, scrollLeft: 0, selStart: 0, selEnd: 0 },
+    tree: { scrollTop: 0, openPaths: [] },
+  }, 'new windows start with zeroed UI state');
+  win.ui.text.scrollTop = 456;
+  win.ui.tree.openPaths.push([0]);
+
+  const json = manager.toJSON();
+  assert.ok(!('ui' in json.windows[0]), 'UI state is ephemeral, never serialized');
+
+  const revived = createWindowManager();
+  const back = revived.restoreWindow(win.id, win.name, '{"a":1}');
+  assert.deepEqual(back.ui.text.scrollTop, 0, 'restored windows start with fresh UI state');
+}
+
+// --- Model: metadata serialization round-trip ---
 {
   const manager = createWindowManager();
   const a = manager.newWindow('First', '{"a":1}');
@@ -320,6 +341,87 @@ const [html, css, app, build, pkg] = await Promise.all(
   const cancelled = dragEvent('dragstart', tab);
   assert.equal(cancelled.defaultPrevented, true, 'dragstart is cancelled while renaming');
   assert.ok(!tab.classList.contains('is-dragging'), 'no drag state while renaming');
+}
+
+// --- DOM: switching windows restores scroll, cursor, and tree expansion ---
+{
+  const dom = new JSDOM(html, { url: 'http://localhost/', pretendToBeVisual: true });
+  for (const key of ['window', 'document', 'sessionStorage', 'localStorage',
+    'requestAnimationFrame', 'cancelAnimationFrame', 'matchMedia', 'getComputedStyle',
+    'Node', 'Element', 'HTMLElement', 'CustomEvent', 'Event', 'KeyboardEvent',
+    'MutationObserver']) {
+    if (dom.window[key] !== undefined) {
+      try { globalThis[key] = dom.window[key]; } catch (_) {}
+    }
+  }
+  try { Object.defineProperty(globalThis, 'navigator', { value: dom.window.navigator, configurable: true }); } catch (_) {}
+  globalThis.addEventListener = dom.window.addEventListener.bind(dom.window);
+  globalThis.removeEventListener = dom.window.removeEventListener.bind(dom.window);
+  globalThis.Worker = class {
+    constructor() { throw new Error('Worker must not start during this test'); }
+  };
+  globalThis.ResizeObserver = class {
+    constructor() {}
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+  dom.window.Element.prototype.scrollIntoView = function () {};
+
+  await import('./app.js?window-ui-state=1');
+  const doc = dom.window.document;
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const editor = doc.querySelector('#payloadInput');
+  const treeView = doc.querySelector('#treeView');
+  const tabFor = (id) => [...doc.querySelectorAll('.window-tab')]
+    .find((tab) => tab.dataset.windowId === id);
+  const clickTab = (id) => tabFor(id).querySelector('.window-tab-select').click();
+
+  doc.querySelector('#newWindowBtn').click(); // window-2 created and activated
+  clickTab('window-1');
+  editor.value = JSON.stringify({ a: { b: { c: 1, d: 2 } }, e: [1, 2, 3, 4, 5] });
+  editor.scrollTop = 456;
+  editor.scrollLeft = 12;
+  editor.setSelectionRange(10, 20);
+
+  // Text view: window-1's scroll and cursor survive a round-trip.
+  clickTab('window-2');
+  assert.equal(editor.value, '', 'window-2 starts empty');
+  editor.scrollTop = 10; // window-2 gets its own position
+  clickTab('window-1');
+  assert.equal(editor.scrollTop, 456, 'text scrollTop restored');
+  assert.equal(editor.scrollLeft, 12, 'text scrollLeft restored');
+  assert.equal(editor.selectionStart, 10, 'cursor position restored');
+  assert.equal(editor.selectionEnd, 20, 'selection end restored');
+  clickTab('window-2');
+  assert.equal(editor.scrollTop, 10, 'window-2 kept its own scroll position');
+
+  // Tree view: expansion and scroll survive a round-trip.
+  clickTab('window-1');
+  doc.querySelector('#viewTreeBtn').click();
+  await sleep(150);
+  let treeRows = [...treeView.querySelectorAll('.tree-row')];
+  assert.ok(treeRows.length >= 4, 'tree built for window-1');
+  treeRows[2].dispatchEvent(new dom.window.Event('click', { bubbles: true })); // expand a.b
+  assert.ok(treeRows[2].parentElement.classList.contains('open'), 'a.b expanded');
+  treeView.scrollTop = 123;
+
+  clickTab('window-2');
+  await sleep(150);
+  clickTab('window-1');
+  await sleep(150);
+  assert.equal(treeView.scrollTop, 123, 'tree scroll restored');
+  treeRows = [...treeView.querySelectorAll('.tree-row')];
+  assert.ok(treeRows[2].parentElement.classList.contains('open'), 'tree expansion restored');
+
+  // Toggling tree -> text -> tree also round-trips (leave-tree snapshot).
+  doc.querySelector('#viewTextBtn').click();
+  await sleep(50);
+  doc.querySelector('#viewTreeBtn').click();
+  await sleep(150);
+  treeRows = [...treeView.querySelectorAll('.tree-row')];
+  assert.ok(treeRows[2].parentElement.classList.contains('open'), 'view toggle restores expansion');
+  assert.equal(treeView.scrollTop, 123, 'view toggle restores tree scroll');
 }
 
 console.log('All payload window regression tests passed.');

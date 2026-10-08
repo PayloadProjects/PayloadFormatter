@@ -85,6 +85,10 @@ const treeController = createTreeController({
   nextPaint,
   onFormat: formatPayload,
   onPasteText: pasteTextAndFormat,
+  // Leaving tree view for text view: snapshot the expansion/scroll so a
+  // later window switch (or return to tree view) restores it.
+  onTreeHide: () => { if (activeWindow) stashTreeUi(activeWindow); },
+  getTreeRestore: () => activeWindow?.ui.tree,
 });
 
 initializeTheme();
@@ -505,6 +509,36 @@ async function hydrateWindowHistories() {
   }
 }
 
+// Per-window UI state: switching windows stashes where the user left the
+// outgoing window (text scroll/cursor, tree scroll/expansion) and restores
+// the incoming window's snapshot, so each window is exactly as it was left.
+function stashTextUi(win) {
+  if (!win) return;
+  const ui = win.ui.text;
+  ui.scrollTop = editor.scrollTop;
+  ui.scrollLeft = editor.scrollLeft;
+  try {
+    ui.selStart = editor.selectionStart ?? 0;
+    ui.selEnd = editor.selectionEnd ?? 0;
+  } catch (_) { /* selection APIs can throw on some input states */ }
+}
+
+function stashTreeUi(win) {
+  if (!win || !treeController.isTree()) return;
+  const treeView = document.querySelector('#treeView');
+  win.ui.tree.scrollTop = treeView ? treeView.scrollTop : 0;
+  win.ui.tree.openPaths = treeController.openPaths();
+}
+
+function restoreTextUi(win) {
+  const ui = win.ui.text;
+  editor.scrollTop = ui.scrollTop;
+  editor.scrollLeft = ui.scrollLeft;
+  try {
+    editor.setSelectionRange(ui.selStart, ui.selEnd);
+  } catch (_) { /* offsets may exceed a truncated large-mode preview */ }
+}
+
 function activateWindow(id, { stash = true } = {}) {
   const next = windowManager.getWindow(id);
   if (!next || busy) return;
@@ -516,6 +550,8 @@ function activateWindow(id, { stash = true } = {}) {
     clearTimeout(historyTimer);
     historyTimer = 0;
     applyHistoryUpdate();
+    stashTextUi(activeWindow);
+    stashTreeUi(activeWindow);
     const text = getPayloadText();
     activeWindow.payload = text;
     persistPayloadFor(activeWindow, text, inLargeMode());
@@ -523,7 +559,8 @@ function activateWindow(id, { stash = true } = {}) {
   activeWindow = next;
   history = next.history;
   windowManager.setActive(id);
-  setPayloadText(next.payload || '');
+  setPayloadText(next.payload || '', { treeRestore: next.ui.tree });
+  restoreTextUi(next);
   renderWindowBar();
   syncHistoryNav();
   persistWindowList();
@@ -679,7 +716,7 @@ function syncHistoryNav() {
 
 // Replaces the visible payload wholesale (history navigation, window
 // switches). No history side effects: callers manage their own entries.
-function setPayloadText(text) {
+function setPayloadText(text, { treeRestore } = {}) {
   editRevision += 1;
   if (text.length >= LARGE_PAYLOAD_CHARS) {
     enterLargeMode(text, { formatted: false });
@@ -691,7 +728,7 @@ function setPayloadText(text) {
     else refreshUi();
   }
   saveDraftNow();
-  treeController.refresh();
+  treeController.refresh(treeRestore);
 }
 
 function navigateHistory(direction) {
