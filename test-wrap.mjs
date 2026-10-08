@@ -67,7 +67,7 @@ assert.match(css, /\.strip-btn\[aria-pressed="true"\]/,
 // what lets flex items actually shrink so their text can wrap.
 assert.doesNotMatch(stripMeta, /id="wrapToggleBtn"[^>]*data-view-scope/,
   'wrap toggle is not scoped to text view anymore');
-assert.match(treeCss, /html\[data-wrap="on"\] \.tree-row \{\s*width: auto;\s*white-space: normal;/,
+assert.match(treeCss, /html\[data-wrap="on"\] \.tree-row \{\s*width: auto;\s*white-space: normal;\s*flex-wrap: wrap;/,
   'wrapped tree rows stay within the panel width');
 assert.match(treeCss, /html\[data-wrap="on"\] \.tree-row > span \{\s*min-width: 0;\s*overflow-wrap: anywhere;/,
   'tree label spans can shrink and break long tokens when wrapped');
