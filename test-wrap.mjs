@@ -62,6 +62,18 @@ assert.match(css, /html\[data-wrap="on"\] \.syntax-gutter \{\s*display: none;/,
 assert.match(css, /\.strip-btn\[aria-pressed="true"\]/,
   'pressed wrap toggle has an active style');
 
+// Tree wrap: the same toggle serves tree view (no view scoping), and rows
+// become multi-line within the panel width. The span min-width reset is
+// what lets flex items actually shrink so their text can wrap.
+assert.doesNotMatch(stripMeta, /id="wrapToggleBtn"[^>]*data-view-scope/,
+  'wrap toggle is not scoped to text view anymore');
+assert.match(treeCss, /html\[data-wrap="on"\] \.tree-row \{\s*width: auto;\s*white-space: normal;/,
+  'wrapped tree rows stay within the panel width');
+assert.match(treeCss, /html\[data-wrap="on"\] \.tree-row > span \{\s*min-width: 0;\s*overflow-wrap: anywhere;/,
+  'tree label spans can shrink and break long tokens when wrapped');
+assert.match(app, /treeController\.isTree\(\)/,
+  'wrap tooltip adapts to the current view');
+
 // Compact chrome: the payload panel gets the space, chrome shrinks.
 assert.match(css, /\.shell \{[^}]*padding: 8px 12px 10px;[^}]*gap: 8px;/,
   'shell padding and gap are compact');
