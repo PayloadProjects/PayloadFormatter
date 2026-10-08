@@ -211,7 +211,7 @@ h1 { margin: 0; color: var(--heading); font-size: 15px; line-height: 1.25; font-
 /* Payload windows: tab bar for juggling payloads without browser tabs.
    Inactive tabs are quiet labels; the active tab merges into the strip below,
    like a browser tab merging into its toolbar. */
-.window-bar { flex: 0 0 auto; display: flex; align-items: flex-end; gap: 4px; min-height: 28px; padding: 4px 12px 0; background: var(--panel-bg); border-bottom: 1px solid var(--panel-border); }
+.window-bar { flex: 0 0 auto; display: flex; align-items: flex-end; gap: 4px; min-height: 28px; padding: 4px 12px 0; background: var(--panel-bg); border-bottom: 1px solid var(--panel-border); position: relative; }
 .window-tabs { min-width: 0; flex: 0 1 auto; display: flex; align-items: flex-end; gap: 2px; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
 .window-tabs::-webkit-scrollbar { display: none; }
 /* Chrome-style squeezing: tabs shrink proportionally to share the strip down
@@ -221,6 +221,10 @@ h1 { margin: 0; color: var(--heading); font-size: 15px; line-height: 1.25; font-
 .window-tab:hover { background: var(--button-hover-bg); }
 .window-tab.is-active { background: var(--strip-bg); border-color: var(--panel-border); margin-bottom: -1px; padding-bottom: 3px; }
 .window-tab.is-active:hover { background: var(--strip-bg); }
+/* Drag-and-drop reordering: the dragged tab fades, and an insertion line
+   marks the drop position. */
+.window-tab.is-dragging { opacity: 0.35; }
+.tab-drop-indicator { position: absolute; top: 6px; bottom: 1px; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--editor-focus); pointer-events: none; z-index: 5; }
 .window-tab-select { min-width: 0; min-height: 18px; padding: 1px 4px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; max-width: 140px; }
 .window-tab.is-active .window-tab-select { color: var(--heading); }
 .window-tab-name { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

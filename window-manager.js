@@ -96,6 +96,19 @@ export function createWindowManager() {
     return { closed: true, removed, activateId };
   }
 
+  // Reorders a window: removes it and reinserts at toIndex (clamped into
+  // range, so toIndex may be an insertion point past the end). The index is
+  // interpreted after removal, matching drag-and-drop insertion math.
+  // Returns true when the order actually changed.
+  function moveWindow(id, toIndex) {
+    const from = windows.findIndex((win) => win.id === id);
+    if (from < 0) return false;
+    const [win] = windows.splice(from, 1);
+    const clamped = Math.max(0, Math.min(toIndex, windows.length));
+    windows.splice(clamped, 0, win);
+    return clamped !== from;
+  }
+
   function toJSON() {
     return {
       windows: windows.map((win) => ({ id: win.id, name: win.name })),
@@ -113,6 +126,7 @@ export function createWindowManager() {
     setCounter,
     renameWindow,
     closeWindow,
+    moveWindow,
     toJSON,
     get windows() { return windows; },
     get activeId() { return activeId; },

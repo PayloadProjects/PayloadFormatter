@@ -176,6 +176,118 @@ windowTabs?.addEventListener('dblclick', (event) => {
   const tab = event.target.closest('.window-tab');
   if (tab) startRename(tab);
 });
+
+// Drag-and-drop tab reordering (HTML5 DnD) plus Alt+Arrow keyboard moves.
+// The drop indicator lives on .window-bar (never re-rendered) so
+// renderWindowBar's replaceChildren() cannot destroy it mid-drag.
+const windowBar = document.querySelector('.window-bar');
+const dropIndicator = document.createElement('div');
+dropIndicator.className = 'tab-drop-indicator';
+dropIndicator.hidden = true;
+windowBar?.append(dropIndicator);
+
+let draggedWindowId = null;
+
+function hideDropIndicator() {
+  dropIndicator.hidden = true;
+}
+
+// Insertion index for a drop at clientX, computed against the tabs EXCLUDING
+// the dragged one (it still occupies a DOM slot while being dragged).
+function dropInsertionIndex(clientX) {
+  const tabs = [...windowTabs.querySelectorAll('.window-tab')]
+    .filter((tab) => tab.dataset.windowId !== draggedWindowId);
+  for (let i = 0; i < tabs.length; i += 1) {
+    const rect = tabs[i].getBoundingClientRect();
+    if (clientX < rect.left + rect.width / 2) return i;
+  }
+  return tabs.length;
+}
+
+function showDropIndicator(index) {
+  const tabs = [...windowTabs.querySelectorAll('.window-tab')]
+    .filter((tab) => tab.dataset.windowId !== draggedWindowId);
+  const barRect = windowBar.getBoundingClientRect();
+  let x;
+  if (index < tabs.length) {
+    x = tabs[index].getBoundingClientRect().left - barRect.left;
+  } else if (tabs.length > 0) {
+    x = tabs[tabs.length - 1].getBoundingClientRect().right - barRect.left;
+  } else {
+    hideDropIndicator();
+    return;
+  }
+  dropIndicator.style.left = `${x - 1}px`;
+  dropIndicator.hidden = false;
+}
+
+function endTabDrag() {
+  draggedWindowId = null;
+  windowTabs?.querySelector('.window-tab.is-dragging')?.classList.remove('is-dragging');
+  hideDropIndicator();
+}
+
+function focusTabSelect(id) {
+  [...windowTabs.querySelectorAll('.window-tab')]
+    .find((tab) => tab.dataset.windowId === id)
+    ?.querySelector('.window-tab-select')
+    ?.focus({ preventScroll: true });
+}
+
+windowTabs?.addEventListener('dragstart', (event) => {
+  const tab = event.target.closest('.window-tab');
+  // A rename in progress owns the tab: don't let a drag tear it away.
+  if (!tab || tab.querySelector('.window-rename-input')) {
+    event.preventDefault();
+    return;
+  }
+  draggedWindowId = tab.dataset.windowId;
+  event.dataTransfer.setData('text/plain', draggedWindowId);
+  event.dataTransfer.effectAllowed = 'move';
+  tab.classList.add('is-dragging');
+});
+
+windowTabs?.addEventListener('dragover', (event) => {
+  if (!draggedWindowId) return;
+  event.preventDefault(); // required to allow the drop
+  event.dataTransfer.dropEffect = 'move';
+  showDropIndicator(dropInsertionIndex(event.clientX));
+});
+
+windowTabs?.addEventListener('dragleave', (event) => {
+  if (!windowTabs.contains(event.relatedTarget)) hideDropIndicator();
+});
+
+windowTabs?.addEventListener('drop', (event) => {
+  event.preventDefault();
+  const id = (event.dataTransfer && event.dataTransfer.getData('text/plain')) || draggedWindowId;
+  const toIndex = dropInsertionIndex(event.clientX);
+  endTabDrag();
+  if (id && windowManager.moveWindow(id, toIndex)) {
+    renderWindowBar();
+    persistWindowList();
+    focusTabSelect(id);
+  }
+});
+
+windowTabs?.addEventListener('dragend', endTabDrag);
+
+// Keyboard reordering: Alt+Arrow moves the focused tab. HTML5 DnD has no
+// keyboard path, so tabs would otherwise be unmovable without a mouse.
+windowTabs?.addEventListener('keydown', (event) => {
+  if (!event.altKey || (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')) return;
+  const tab = event.target.closest('.window-tab');
+  if (!tab) return;
+  event.preventDefault();
+  const id = tab.dataset.windowId;
+  const from = windowManager.windows.findIndex((win) => win.id === id);
+  if (from < 0) return;
+  if (windowManager.moveWindow(id, from + (event.key === 'ArrowLeft' ? -1 : 1))) {
+    renderWindowBar();
+    persistWindowList();
+    focusTabSelect(id);
+  }
+});
 themeToggleBtn?.addEventListener('click', () => {
   applyTheme(currentTheme() === 'dark' ? 'light' : 'dark', { persist: true });
 });
@@ -470,11 +582,12 @@ function renderWindowBar() {
     tab.dataset.windowId = win.id;
     tab.setAttribute('role', 'tab');
     tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    tab.draggable = true;
 
     const select = document.createElement('button');
     select.type = 'button';
     select.className = 'window-tab-select';
-    select.title = `${win.name} — double-click to rename`;
+    select.title = `${win.name} — drag to reorder, Alt+←/→ to move, double-click to rename`;
     const name = document.createElement('span');
     name.className = 'window-tab-name';
     name.textContent = win.name;
