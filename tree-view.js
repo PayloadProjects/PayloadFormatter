@@ -377,7 +377,7 @@ export function createTreeView(container, { onCopyPath } = {}) {
     const row = document.createElement('div');
     row.className = 'tree-row';
     row.tabIndex = -1;
-    row.style.paddingLeft = `${depth * 16 + 6}px`;
+    row.style.setProperty('--row-pad', `${depth * 16 + 6}px`);
 
     const toggle = span('tree-toggle', node.container ? '▸' : '');
     toggle.setAttribute('aria-hidden', 'true');

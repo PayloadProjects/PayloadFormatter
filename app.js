@@ -357,11 +357,11 @@ function applyWrap(on, { persist = false } = {}) {
   if (wrapToggleBtn) {
     wrapToggleBtn.setAttribute('aria-pressed', String(on));
     // The toggle now serves both views; describe what it does in the
-    // current one (tree rows have no syntax colors to pause).
+    // current one (tree rows have no syntax colors; text keeps its colors).
     const inTree = typeof treeController !== 'undefined' && treeController.isTree();
     wrapToggleBtn.title = on
       ? (inTree ? 'Unwrap tree rows' : 'Unwrap long lines')
-      : (inTree ? 'Wrap tree rows' : 'Wrap long lines (syntax colors pause while wrap is on)');
+      : (inTree ? 'Wrap tree rows' : 'Wrap long lines');
   }
   if (persist) {
     try { localStorage.setItem(WRAP_STORAGE_KEY, next); } catch (_) {}

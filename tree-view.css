@@ -146,6 +146,7 @@
   position: relative;
   width: max-content;
   min-width: 100%;
+  padding-left: var(--row-pad, 6px);
   padding-right: 12px;
   padding-block: 2px;
   display: flex;
@@ -175,6 +176,13 @@ html[data-wrap="on"] .tree-row {
   width: auto;
   white-space: normal;
   flex-wrap: wrap;
+  /* Hanging indent: wrapped continuation lines start under the content
+     (past the 20px toggle), not at the row's left edge. The toggle is
+     pulled back into the added padding so the first line doesn't shift. */
+  padding-left: calc(var(--row-pad, 6px) + 20px);
+}
+html[data-wrap="on"] .tree-row > .tree-toggle {
+  margin-left: -20px;
 }
 html[data-wrap="on"] .tree-row > span {
   min-width: 0;
