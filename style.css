@@ -238,8 +238,10 @@ h1 { margin: 0; color: var(--heading); font-size: 15px; line-height: 1.25; font-
 .strip-btn { min-height: 24px; padding: 2px 10px; border: 1px solid var(--panel-border); border-radius: 8px; background: var(--editor-bg); color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; }
 .strip-btn:hover { background: var(--button-hover-bg); color: var(--text); }
 .strip-btn[aria-pressed="true"] { background: var(--selected-bg); color: var(--heading); border-color: var(--brand-mark-border); }
-/* Word wrap: the native editor wraps; the overlay mirror maps one source line
-   to one visual row, so it (and the gutter) stand down while wrap is on. */
+/* Word wrap: the native editor wraps; the overlay mirror wraps identically
+   (one block per source line, numbers riding along) up to its size budget,
+   beyond which it stands down to the plain editor. The separate nowrap
+   gutter stays hidden while wrap is on. */
 html[data-wrap="on"] .text-editor { --gutter-width: 0px; }
 html[data-wrap="on"] .text-editor .editor { white-space: pre-wrap; overflow-wrap: anywhere; }
 html[data-wrap="on"] .syntax-gutter { display: none; }

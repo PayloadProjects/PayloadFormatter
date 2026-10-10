@@ -37,6 +37,30 @@
 .syntax-attribute { color: var(--syntax-attribute); }
 .syntax-muted, .syntax-comment { color: var(--syntax-muted); }
 .editor-frame[data-view="tree"] .text-editor { display: none; }
+/* Wrap-mode highlighting: the mirror wraps exactly like the textarea, so
+   colors and line numbers survive wrapping. Each source line is a block
+   whose number rides on its first wrapped row; --wln-w reserves the number
+   width on both surfaces so the caret stays aligned with the text. */
+html[data-wrap="on"] .syntax-mirror {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  padding-left: calc(12px + var(--wln-w, 0px));
+}
+html[data-wrap="on"] .syntax-wline { display: block; }
+html[data-wrap="on"] .syntax-wln {
+  display: inline-block;
+  box-sizing: border-box;
+  width: var(--wln-w, 4ch);
+  margin-left: calc(-1 * var(--wln-w, 4ch));
+  padding-right: 8px;
+  text-align: right;
+  color: var(--syntax-muted);
+  user-select: none;
+}
+html[data-wrap="on"] .text-editor .editor {
+  padding-left: calc(12px + var(--wln-w, 0px));
+}
 .text-editor .empty-state { font-family: ui-sans-serif, system-ui, sans-serif; z-index: 2; }
 @media (forced-colors: active) {
   .syntax-viewport { display: none; }

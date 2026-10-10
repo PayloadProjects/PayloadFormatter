@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [html, css, editorCss, app, editorJs, treeCss] = await Promise.all(
-  ['index.html', 'style.css', 'text-editor.css', 'app.js', 'text-editor.js', 'tree-view.css']
+const [html, css, editorCss, app, editorJs, treeCss, treeJs, shared] = await Promise.all(
+  ['index.html', 'style.css', 'text-editor.css', 'app.js', 'text-editor.js', 'tree-view.css', 'tree-view.js', 'syntax-shared.js']
     .map((file) => readFile(new URL(file, import.meta.url), 'utf8')),
 );
 
@@ -15,8 +15,8 @@ assert.deepEqual([...stripMeta.matchAll(/<(?:button|span)\b[^>]*id="([^"]+)"/g)]
   'Wrap, tree actions and badge sit in that order');
 assert.match(stripMeta, /id="wrapToggleBtn"[^>]*aria-pressed="false"/,
   'wrap toggle starts unpressed');
-assert.match(stripMeta, /title="Wrap long lines \(syntax colors pause while wrap is on\)"/,
-  'wrap toggle explains the syntax overlay pause');
+assert.match(stripMeta, /title="Wrap long lines"/,
+  'wrap toggle title no longer warns about a syntax pause');
 
 // The wrap preference is restored before first paint, like the theme.
 const headScript = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
@@ -41,24 +41,45 @@ assert.match(app, /root\.dataset\.wrap = next/,
 assert.match(app, /applyWrap\([\s\S]*?\) \{[\s\S]*?syntaxEditor\.refresh\(\)/,
   'applying wrap re-renders the syntax editor');
 
-// The overlay cannot map wrapped source lines to visual rows, so it stands
-// down in wrap mode instead of rendering misaligned highlights.
+// The overlay keeps colors and line numbers in wrap mode: the mirror wraps
+// exactly like the textarea (one block per source line, the number riding on
+// its first wrapped row). Only payloads past the wrap budget stand down.
 assert.ok(editorJs.includes("document.documentElement.dataset.wrap === 'on'"),
   'syntax editor reads the wrap state');
 assert.match(editorJs, /wrapNow !== wrapOn/,
   'a wrap toggle invalidates the syntax snapshot');
-assert.match(editorJs, /if \(wrapOn\) \{[\s\S]*?plain\('wrap'\)/,
-  'wrap mode clears the overlay via the plain fallback');
+assert.match(editorJs, /if \(wrapOn && text\.length > MAX_WRAP_HIGHLIGHT_CHARS\) \{[\s\S]*?plain\('wrap-size'\)/,
+  'oversized payloads stand down to the plain editor in wrap mode');
 assert.ok(editorJs.includes("host.style.removeProperty('--gutter-width')"),
   'wrap mode releases the gutter reservation');
-assert.match(editorJs, /function render\(\) \{[\s\S]*?dataset\.wrap === 'on'[\s\S]*?plain\('wrap'\)/,
-  'render never paints the overlay while wrap is on');
+assert.match(editorJs, /function render\(\) \{[\s\S]*?dataset\.wrap === 'on'[\s\S]*?renderWrapped\(\)/,
+  'render paints the wrap overlay while wrap is on');
+assert.match(editorJs, /function renderWrapped\(\) \{/,
+  'wrap renderer exists');
+assert.match(editorJs, /function buildWrapMirror\(\) \{[\s\S]*?className = 'syntax-wline'/,
+  'wrap overlay builds one block per source line');
+assert.match(editorJs, /className = 'syntax-wln'/,
+  'wrap overlay numbers each source line');
+assert.match(editorJs, /MAX_WRAP_LINES[\s\S]*?plain\('wrap-size'\)/,
+  'wrap overlay has a line-count budget');
+assert.match(editorJs, /MAX_WRAP_SPANS[\s\S]*?plain\('wrap-size'\)/,
+  'wrap overlay has a token budget');
+assert.match(shared, /export const MAX_WRAP_HIGHLIGHT_CHARS = 256 \* 1024;/,
+  'wrap highlight budget is 256KB');
 
 // Wrap styling: the editor wraps, the gutter hides, both themes inherit it.
 assert.match(css, /html\[data-wrap="on"\] \.text-editor \.editor \{\s*white-space: pre-wrap; overflow-wrap: anywhere;/,
   'wrapped editor CSS exists');
 assert.match(css, /html\[data-wrap="on"\] \.syntax-gutter \{\s*display: none;/,
   'gutter hides in wrap mode');
+// Wrap-mode highlighting: the mirror wraps like the textarea and reserves
+// number width on both surfaces so the caret stays aligned with the text.
+assert.match(editorCss, /html\[data-wrap="on"\] \.syntax-mirror \{\s*white-space: pre-wrap;\s*overflow-wrap: anywhere;/,
+  'wrap mirror wraps like the textarea');
+assert.match(editorCss, /html\[data-wrap="on"\] \.syntax-wln \{/,
+  'wrap line numbers have dedicated styles');
+assert.match(editorCss, /html\[data-wrap="on"\] \.text-editor \.editor \{\s*padding-left: calc\(12px \+ var\(--wln-w, 0px\)\);/,
+  'wrapped editor reserves the number width');
 assert.match(css, /\.strip-btn\[aria-pressed="true"\]/,
   'pressed wrap toggle has an active style');
 
@@ -69,6 +90,14 @@ assert.doesNotMatch(stripMeta, /id="wrapToggleBtn"[^>]*data-view-scope/,
   'wrap toggle is not scoped to text view anymore');
 assert.match(treeCss, /html\[data-wrap="on"\] \.tree-row \{\s*width: auto;\s*white-space: normal;\s*flex-wrap: wrap;/,
   'wrapped tree rows stay within the panel width');
+assert.match(treeCss, /html\[data-wrap="on"\] \.tree-row \{\s*[^}]*padding-left: calc\(var\(--row-pad, 6px\) \+ 20px\);/,
+  'wrapped rows get a hanging indent past the toggle');
+assert.match(treeCss, /html\[data-wrap="on"\] \.tree-row > \.tree-toggle \{\s*margin-left: -20px;/,
+  'wrapped toggle is pulled back so the first line does not shift');
+assert.match(treeCss, /\.tree-row \{\s*[^}]*padding-left: var\(--row-pad, 6px\);/,
+  'row indentation comes from the --row-pad variable');
+assert.ok(treeJs.includes("row.style.setProperty('--row-pad'"),
+  'renderNode publishes the indent as a CSS variable');
 assert.match(treeCss, /html\[data-wrap="on"\] \.tree-row > span \{\s*min-width: 0;\s*overflow-wrap: anywhere;/,
   'tree label spans can shrink and break long tokens when wrapped');
 assert.match(app, /treeController\.isTree\(\)/,

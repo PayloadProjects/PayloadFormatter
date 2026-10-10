@@ -1,7 +1,8 @@
-import { MAX_HIGHLIGHT_CHARS, MAX_VISIBLE_CHARS, MAX_VISIBLE_SPANS, TOKEN_CLASSES, lineAt } from './syntax-shared.js';
+import { MAX_HIGHLIGHT_CHARS, MAX_VISIBLE_CHARS, MAX_VISIBLE_SPANS, MAX_WRAP_HIGHLIGHT_CHARS, MAX_WRAP_LINES, MAX_WRAP_SPANS, TOKEN_CLASSES, lineAt } from './syntax-shared.js';
 
 // The native textarea remains the only editable source of truth. This optional,
-// aria-hidden mirror renders visible lines only, using worker-produced offsets.
+// aria-hidden mirror paints syntax colors beneath it: a line window in nowrap
+// mode, or one wrapping block per source line in wrap mode.
 export function createSyntaxEditor(editor) {
   const host = document.querySelector('#textEditor');
   const viewport = document.querySelector('#syntaxViewport');
@@ -14,6 +15,7 @@ export function createSyntaxEditor(editor) {
   let wrapOn = document.documentElement.dataset.wrap === 'on';
   let worker = null, running = null, pending = null;
   let timer = 0, deadline = 0, paint = 0, composing = false, disposed = false;
+  let wrapBuiltFor = -1;
   const visible = () => frame?.dataset.view !== 'tree';
 
   function plain(reason = 'pending') {
@@ -68,13 +70,20 @@ export function createSyntaxEditor(editor) {
     }
     clearTimeout(timer);
     plain(text ? 'pending' : 'empty');
-    if (!text) { mirror.replaceChildren(); gutter.replaceChildren(); return; }
-    if (wrapOn) {
-      // The overlay maps one source line to one visual row, so it cannot track
-      // wrapped text. Stand down to the plain native editor while wrap is on.
-      plain('wrap');
+    if (!text) {
+      mirror.replaceChildren(); gutter.replaceChildren();
+      host.style.removeProperty('--wln-w');
+      wrapBuiltFor = -1;
+      return;
+    }
+    if (wrapOn && text.length > MAX_WRAP_HIGHLIGHT_CHARS) {
+      // The wrap overlay renders the whole text (not a line window), so it
+      // has its own budget: oversized payloads get the plain native editor.
+      plain('wrap-size');
       mirror.replaceChildren(); gutter.replaceChildren();
       host.style.removeProperty('--gutter-width');
+      host.style.removeProperty('--wln-w');
+      wrapBuiltFor = -1;
       return;
     }
     if (text.length > MAX_HIGHLIGHT_CHARS) { plain('size-limit'); return; }
@@ -86,7 +95,11 @@ export function createSyntaxEditor(editor) {
 
   function render() {
     if (!model || composing || !visible() || disposed) return;
-    if (document.documentElement.dataset.wrap === 'on') { plain('wrap'); return; }
+    if (document.documentElement.dataset.wrap === 'on') { renderWrapped(); return; }
+    // Clear any wrap-mode inline sizing so the nowrap line window is exact.
+    mirror.style.width = ''; mirror.style.left = ''; mirror.style.top = '';
+    mirror.style.paddingTop = ''; mirror.style.paddingRight = ''; mirror.style.paddingBottom = '';
+    host.style.removeProperty('--wln-w');
     const style = getComputedStyle(editor);
     const height = editor.clientHeight, width = editor.clientWidth;
     if (!height || !width) return;
@@ -138,6 +151,82 @@ export function createSyntaxEditor(editor) {
     active.style.height = `${lineHeight}px`;
     active.hidden = document.activeElement !== editor || editor.selectionStart !== editor.selectionEnd;
     host.classList.add('has-syntax'); host.dataset.syntaxState = 'ready';
+  }
+
+  // Wrap-mode highlighting: the mirror wraps exactly like the textarea
+  // (same box, font, and wrap properties), so colors track wrapped text.
+  // Unlike the nowrap line window, this renders the whole payload once per
+  // revision and only repositions on scroll — hence the tighter budgets.
+  function renderWrapped() {
+    // Kill any stale nowrap gutter reservation; wrap mode reserves its own
+    // number width via --wln-w instead.
+    host.style.removeProperty('--gutter-width');
+    const width = editor.clientWidth, height = editor.clientHeight;
+    if (!width || !height) return;
+    const style = getComputedStyle(editor);
+    mirror.style.left = `${editor.offsetLeft}px`;
+    mirror.style.top = '0px';
+    mirror.style.width = `${width}px`;
+    mirror.style.paddingTop = style.paddingTop;
+    mirror.style.paddingRight = style.paddingRight;
+    mirror.style.paddingBottom = style.paddingBottom;
+    viewport.style.width = ''; viewport.style.height = '';
+    if (wrapBuiltFor !== revision) {
+      // Mark first so a budget breach does not rebuild on every scroll frame.
+      wrapBuiltFor = revision;
+      if (!buildWrapMirror()) {
+        mirror.replaceChildren();
+        host.style.removeProperty('--wln-w');
+        return;
+      }
+    }
+    mirror.style.transform = `translate(${-editor.scrollLeft}px, ${-editor.scrollTop}px)`;
+    active.hidden = true;
+    host.classList.add('has-syntax');
+    host.dataset.syntaxState = 'ready';
+  }
+
+  // One block per source line: its line number plus token spans. The number
+  // rides on the block's first wrapped row. Returns false when the payload
+  // exceeds the wrap overlay's budgets (caller stands down to plain text).
+  function buildWrapMirror() {
+    const text = model.text, lines = model.lines, spans = model.spans;
+    if (lines.length > MAX_WRAP_LINES) { plain('wrap-size'); return false; }
+    const digits = String(lines.length).length;
+    host.style.setProperty('--wln-w', `${Math.max(4, digits + 1)}ch`);
+    const fragment = document.createDocumentFragment();
+    const spanCount = spans.length / 3;
+    let s = 0, built = 0;
+    for (let li = 0; li < lines.length; li++) {
+      const lineStart = lines[li];
+      let lineEnd = li + 1 < lines.length ? lines[li + 1] : text.length;
+      if (lineEnd > lineStart && text[lineEnd - 1] === '\n') lineEnd--;
+      if (lineEnd > lineStart && text[lineEnd - 1] === '\r') lineEnd--;
+      const div = document.createElement('div');
+      div.className = 'syntax-wline';
+      const number = document.createElement('span');
+      number.className = 'syntax-wln';
+      number.textContent = String(li + 1);
+      number.setAttribute('aria-hidden', 'true');
+      div.append(number);
+      while (s < spanCount && spans[s * 3 + 1] <= lineStart) s++;
+      let cursor = lineStart;
+      for (let i = s; i < spanCount && spans[i * 3] < lineEnd; i++) {
+        if (++built > MAX_WRAP_SPANS) { plain('wrap-size'); return false; }
+        const from = Math.max(lineStart, spans[i * 3]);
+        const to = Math.min(lineEnd, spans[i * 3 + 1]);
+        if (from > cursor) div.append(document.createTextNode(text.slice(cursor, from)));
+        const token = document.createElement('span');
+        token.className = `syntax-${TOKEN_CLASSES[spans[i * 3 + 2]] || 'muted'}`;
+        token.textContent = text.slice(from, to);
+        div.append(token);
+        cursor = to;
+      }
+      if (cursor < lineEnd) div.append(document.createTextNode(text.slice(cursor, lineEnd)));
+      fragment.append(div);
+    }
+    mirror.replaceChildren(fragment);
+    return true;
   }
 
   editor.addEventListener('scroll', scheduleRender, { passive: true });
