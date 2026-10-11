@@ -99,6 +99,7 @@ export function createSyntaxEditor(editor) {
     // Clear any wrap-mode inline sizing so the nowrap line window is exact.
     mirror.style.width = ''; mirror.style.left = ''; mirror.style.top = '';
     mirror.style.paddingTop = ''; mirror.style.paddingRight = ''; mirror.style.paddingBottom = '';
+    gutter.style.display = '';
     host.style.removeProperty('--wln-w');
     const style = getComputedStyle(editor);
     const height = editor.clientHeight, width = editor.clientWidth;
@@ -170,7 +171,15 @@ export function createSyntaxEditor(editor) {
     mirror.style.paddingTop = style.paddingTop;
     mirror.style.paddingRight = style.paddingRight;
     mirror.style.paddingBottom = style.paddingBottom;
-    viewport.style.width = ''; viewport.style.height = '';
+    // The viewport's only children are absolutely positioned, so it needs an
+    // explicit box like the nowrap line window: without one it collapses to
+    // 0x0 and overflow:hidden clips the whole mirror, leaving a blank panel
+    // behind the transparent textarea text.
+    viewport.style.width = `${editor.offsetLeft + width}px`;
+    viewport.style.height = `${height}px`;
+    // The nowrap gutter keeps stale line numbers; wrap-mode numbers ride
+    // inline in the mirror instead, so hide it until nowrap returns.
+    gutter.style.display = 'none';
     if (wrapBuiltFor !== revision) {
       // Mark first so a budget breach does not rebuild on every scroll frame.
       wrapBuiltFor = revision;
