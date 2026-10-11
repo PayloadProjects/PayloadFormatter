@@ -80,6 +80,16 @@ const tag = rows[0].querySelector('.syntax-tag');
 assert.ok(tag, 'token spans render inside the line blocks');
 assert.equal(tag.textContent, '<a>', 'token text is intact');
 
+// The viewport's children are all absolutely positioned, so it must keep an
+// explicit box in wrap mode: a collapsed 0x0 viewport with overflow:hidden
+// clips the entire mirror and the panel goes blank behind the transparent
+// textarea text (the reported "wrap mode eats my content" bug).
+const viewport = document.querySelector('#syntaxViewport');
+const gutter = document.querySelector('#syntaxGutter');
+assert.equal(viewport.style.width, '800px', 'wrap mode keeps the viewport width');
+assert.equal(viewport.style.height, '600px', 'wrap mode keeps the viewport height');
+assert.equal(gutter.style.display, 'none', 'wrap mode hides the stale nowrap gutter');
+
 // Scrolling only repositions the already-built mirror.
 const before = mirror.innerHTML;
 editor.scrollTop = 48;
@@ -88,8 +98,16 @@ await new Promise((resolve) => setTimeout(resolve, 50));
 assert.equal(mirror.innerHTML, before, 'scroll does not rebuild the wrap mirror');
 assert.match(mirror.style.transform, /translate\(0px, -48px\)/, 'scroll offsets the mirror');
 
+// Toggling back to nowrap restores the gutter and keeps the viewport sized.
+document.documentElement.dataset.wrap = 'off';
+syntax.refresh('xml');
+await new Promise((resolve) => setTimeout(resolve, 150));
+assert.equal(gutter.style.display, '', 'nowrap mode restores the gutter');
+assert.equal(viewport.style.width, '800px', 'nowrap mode keeps the viewport sized');
+
 // Oversized payloads stand down to the plain editor instead of building a
 // giant mirror.
+document.documentElement.dataset.wrap = 'on';
 editor.value = `x${'\n'.repeat(300 * 1024)}`;
 syntax.refresh('xml');
 await new Promise((resolve) => setTimeout(resolve, 50));
