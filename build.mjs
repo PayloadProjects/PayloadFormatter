@@ -24,12 +24,8 @@ const files = [
   'xml-format.js',
   'text-editor.js',
   'text-editor.css',
-  'syntax-shared.js',
-  'syntax-model.js',
-  'syntax-worker.js',
-  'vendor/prism/prism.js',
-  'vendor/prism/LICENSE',
-  'vendor/prism/README.md',
+  'vendor/codemirror/codemirror.js',
+  'vendor/codemirror/LICENSE',
   '.nojekyll',
 ];
 

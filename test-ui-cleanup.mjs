@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 
-const [html, css, treeCss, ui, build, controllerSource] = await Promise.all(
-  ['index.html', 'style.css', 'tree-view.css', 'ui-controls.js', 'build.mjs', 'tree-controller.js']
+const [html, css, treeCss, ui, build, controllerSource, editorJs] = await Promise.all(
+  ['index.html', 'style.css', 'tree-view.css', 'ui-controls.js', 'build.mjs', 'tree-controller.js', 'text-editor.js']
     .map((file) => readFile(new URL(file, import.meta.url), 'utf8')),
 );
 
@@ -19,7 +19,8 @@ assert.match(css, /grid-template-columns:\s*auto minmax\(0, 1fr\) auto/,
 assert.ok(html.indexOf('class="editor-body"') < html.indexOf('class="toolbar"'));
 assert.ok(!html.includes('brand-subtitle') && !html.includes('workspace-note'));
 assert.equal((html.match(/Local only/g) || []).length, 1);
-assert.ok(html.includes('aria-describedby="editorHelp"'));
+assert.ok(html.includes('id="editorHelp"') && editorJs.includes("'aria-describedby': 'editorHelp'"),
+  'the editable text area is described by the help text');
 assert.ok(html.includes('Ctrl/Cmd + Enter to format.'));
 assert.match(html, /ui-controls\.js\?v=[\w.-]+/);
 assert.ok(build.includes("'ui-controls.js'"));

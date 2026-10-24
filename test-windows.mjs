@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { shimLayout } from './test-support.mjs';
 import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
 import { createWindowManager, MAX_WINDOWS } from './window-manager.js';
@@ -244,7 +245,8 @@ const [html, css, app, build, pkg] = await Promise.all(
 // --- DOM: drag-and-drop reorders tabs, keyboard moves too ---
 {
   const dom = new JSDOM(html, { url: 'http://localhost/', pretendToBeVisual: true });
-  for (const key of ['window', 'document', 'sessionStorage', 'localStorage',
+  shimLayout(dom.window);
+  for (const key of ['window', 'Window', 'document', 'sessionStorage', 'localStorage',
     'requestAnimationFrame', 'cancelAnimationFrame', 'matchMedia', 'getComputedStyle',
     'Node', 'Element', 'HTMLElement', 'CustomEvent', 'Event', 'KeyboardEvent',
     'MutationObserver']) {
@@ -348,7 +350,8 @@ const [html, css, app, build, pkg] = await Promise.all(
 // --- DOM: switching windows restores scroll, cursor, and tree expansion ---
 {
   const dom = new JSDOM(html, { url: 'http://localhost/', pretendToBeVisual: true });
-  for (const key of ['window', 'document', 'sessionStorage', 'localStorage',
+  shimLayout(dom.window);
+  for (const key of ['window', 'Window', 'document', 'sessionStorage', 'localStorage',
     'requestAnimationFrame', 'cancelAnimationFrame', 'matchMedia', 'getComputedStyle',
     'Node', 'Element', 'HTMLElement', 'CustomEvent', 'Event', 'KeyboardEvent',
     'MutationObserver']) {

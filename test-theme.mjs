@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [html, css, app, pkg] = await Promise.all([
+const [html, css, textCss, app, pkg] = await Promise.all([
   readFile(new URL('./index.html', import.meta.url), 'utf8'),
   readFile(new URL('./style.css', import.meta.url), 'utf8'),
+  readFile(new URL('./text-editor.css', import.meta.url), 'utf8'),
   readFile(new URL('./app.js', import.meta.url), 'utf8'),
   readFile(new URL('./package.json', import.meta.url), 'utf8'),
 ]);
@@ -20,7 +21,8 @@ assert.ok(css.includes('--editor-bg:'), 'editor colors must be theme tokens');
 assert.ok(css.includes('--json-bg:'), 'JSON badge colors must support both themes');
 assert.ok(css.includes('--xml-bg:'), 'XML badge colors must support both themes');
 assert.ok(css.includes('.theme-toggle'), 'theme control must be styled');
-assert.ok(css.includes('scrollbar-color:'), 'editor scrollbar must remain visible in both themes');
+assert.match(textCss, /\.cm-scroller \{[^}]*scrollbar-color: var\(--scroll-thumb\) var\(--scroll-track\)/,
+  'editor scrollbar must remain visible in both themes');
 
 assert.ok(app.includes("const THEME_STORAGE_KEY = 'payload-formatter:theme:v1'"));
 assert.ok(app.includes('localStorage.getItem(THEME_STORAGE_KEY)'));
@@ -45,7 +47,8 @@ assert.ok(html.indexOf('id="payloadInput"') < html.indexOf('class="toolbar"'),
   'compact layout must keep the action bar below the editor');
 assert.ok(css.includes('height: 100dvh'), 'app shell should be constrained to the dynamic viewport height');
 assert.ok(css.includes('overflow: hidden'), 'page-level overflow should be contained');
-assert.ok(css.includes('resize: none'), 'editor must not be vertically resizable beyond the viewport');
+assert.match(textCss, /\.text-editor \.cm-editor \{[^}]*flex: 1;[^}]*min-height: 0;/,
+  'the editor fills its panel and scrolls inside it, never growing past the viewport');
 assert.ok(css.includes('flex: 1'), 'editor workspace should consume remaining viewport space');
 assert.ok(css.includes('.brand-mark') && css.includes('.editor-strip'), 'formatter should keep a distinct branded compact identity');
 

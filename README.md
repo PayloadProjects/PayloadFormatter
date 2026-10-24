@@ -7,7 +7,8 @@ A focused browser-only formatter for JSON and XML.
 - Automatic JSON/XML detection
 - Dark and light themes with a saved browser preference
 - Format JSON and XML in one large editor
-- Word-wrap toggle for long lines (syntax colors pause while wrap is on)
+- Word-wrap toggle for long lines
+- Fast editor for multi-megabyte payloads (CodeMirror 6): line numbers, syntax colors, undo, and search & replace (Ctrl/Cmd+F)
 - Copy, Paste, and Delete actions
 - Payload history: roll back/forward through previously pasted payloads
 - Payload windows: named tabs for juggling multiple payloads (double-click to rename)
@@ -19,6 +20,14 @@ A focused browser-only formatter for JSON and XML.
 ## Run locally
 
 Open `index.html` through any local static HTTP server. Module workers do not run reliably from `file://` URLs.
+
+## Editor bundle
+
+The text editor is CodeMirror 6, pre-bundled into `vendor/codemirror/codemirror.js` so the site needs no build step. After changing `vendor/codemirror/entry.js` or the pinned versions in `package.json`, rebuild it:
+
+```bash
+npm run vendor:codemirror
+```
 
 ## Test
 

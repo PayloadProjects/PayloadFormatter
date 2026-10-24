@@ -121,14 +121,15 @@ treeController.refresh();
 
 editor.addEventListener('input', () => {
   editRevision += 1;
-  // Native multi-line insertions can emit many input events in a single task.
-  // Keep revision protection immediate; coalesce metadata/highlighting work.
+  // The editor fires 'input' after every user edit (text-editor.js), and a
+  // burst of edits can land in one task. Keep revision protection
+  // immediate; coalesce metadata/highlighting work.
   if (!inputUiFrame) {
     inputUiFrame = requestAnimationFrame(() => {
       inputUiFrame = 0;
       refreshUiForInput();
       scheduleDraftSave();
-      // A native paste (not intercepted above) lands here: it is a new
+      // An editor paste (not intercepted above) lands here: it is a new
       // payload, so it gets its own history entry instead of editing the
       // current one like ordinary typing does.
       if (pastePending) {
@@ -156,6 +157,9 @@ editorBody?.addEventListener('click', () => {
   pasteAndFormatPayload();
 });
 
+// Capture phase: this runs before the editor's own paste handling, so a
+// large paste can be taken over (preventDefault + stopPropagation) before
+// the editor inserts it.
 editor.addEventListener('paste', (event) => {
   const text = event.clipboardData?.getData('text/plain') ?? '';
   if (!text) return;
@@ -167,15 +171,16 @@ editor.addEventListener('paste', (event) => {
   const nextLength = currentLength - selectedLength + text.length;
 
   if (!inLargeMode() && nextLength < LARGE_PAYLOAD_CHARS) {
-    // Small paste: let the browser insert natively, but remember it was a
-    // paste so the input handler records a new history entry for it.
+    // Small paste: let the editor insert it at the caret, but remember it
+    // was a paste so the input handler records a new history entry for it.
     pastePending = true;
     return;
   }
 
   event.preventDefault();
+  event.stopPropagation();
   if (acceptPastedText(text)) setStatus('Pasted from clipboard.', 'success');
-});
+}, true);
 
 pasteFormatBtn.addEventListener('click', pasteAndFormatPayload);
 copyBtn.addEventListener('click', copyPayload);

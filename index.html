@@ -30,9 +30,9 @@
       })();
     </script>
     <title>JSON/XML Formatter</title>
-    <link rel="stylesheet" href="./style.css?v=windows-v1" />
+    <link rel="stylesheet" href="./style.css?v=codemirror-v1" />
     <link rel="stylesheet" href="./tree-view.css?v=wrap-compact-v1" />
-    <link rel="stylesheet" href="./text-editor.css?v=wrap-compact-v1" />
+    <link rel="stylesheet" href="./text-editor.css?v=codemirror-v1" />
   </head>
   <body>
     <main class="shell">
@@ -181,22 +181,8 @@
           <div id="largeNotice" class="large-notice" role="status" hidden></div>
 
           <div id="textEditor" class="text-editor">
-            <div id="syntaxViewport" class="syntax-viewport" aria-hidden="true" inert>
-              <div id="syntaxActiveLine" class="syntax-active-line" hidden></div>
-              <pre id="syntaxMirror" class="syntax-mirror"></pre>
-              <div id="syntaxGutter" class="syntax-gutter"></div>
-            </div>
-          <textarea
-            id="payloadInput"
-            class="editor"
-            spellcheck="false"
-            wrap="off"
-            autocapitalize="off"
-            autocomplete="off"
-            placeholder=" "
-            aria-label="JSON or XML payload"
-            aria-describedby="editorHelp"
-          ></textarea>
+          <!-- CodeMirror mounts here (text-editor.js); it renders only the visible lines. -->
+          <div id="payloadInput" class="editor is-empty"></div>
           <div class="empty-state" aria-hidden="true">
             <span class="empty-mark">{ }</span>
             <strong>Paste JSON or XML</strong>
@@ -238,7 +224,7 @@
       </section>
     </main>
 
-    <script type="module" src="./app.js?v=windows-v1"></script>
+    <script type="module" src="./app.js?v=codemirror-v1"></script>
     <script type="module" src="./ui-controls.js?v=tree-actions-visible-v1"></script>
   </body>
 </html>

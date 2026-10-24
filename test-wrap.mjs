@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [html, css, editorCss, app, editorJs, treeCss, treeJs, shared] = await Promise.all(
-  ['index.html', 'style.css', 'text-editor.css', 'app.js', 'text-editor.js', 'tree-view.css', 'tree-view.js', 'syntax-shared.js']
+const [html, css, editorCss, app, editorJs, treeCss, treeJs] = await Promise.all(
+  ['index.html', 'style.css', 'text-editor.css', 'app.js', 'text-editor.js', 'tree-view.css', 'tree-view.js']
     .map((file) => readFile(new URL(file, import.meta.url), 'utf8')),
 );
 
@@ -41,45 +41,14 @@ assert.match(app, /root\.dataset\.wrap = next/,
 assert.match(app, /applyWrap\([\s\S]*?\) \{[\s\S]*?syntaxEditor\.refresh\(\)/,
   'applying wrap re-renders the syntax editor');
 
-// The overlay keeps colors and line numbers in wrap mode: the mirror wraps
-// exactly like the textarea (one block per source line, the number riding on
-// its first wrapped row). Only payloads past the wrap budget stand down.
-assert.ok(editorJs.includes("document.documentElement.dataset.wrap === 'on'"),
-  'syntax editor reads the wrap state');
-assert.match(editorJs, /wrapNow !== wrapOn/,
-  'a wrap toggle invalidates the syntax snapshot');
-assert.match(editorJs, /if \(wrapOn && text\.length > MAX_WRAP_HIGHLIGHT_CHARS\) \{[\s\S]*?plain\('wrap-size'\)/,
-  'oversized payloads stand down to the plain editor in wrap mode');
-assert.ok(editorJs.includes("host.style.removeProperty('--gutter-width')"),
-  'wrap mode releases the gutter reservation');
-assert.match(editorJs, /function render\(\) \{[\s\S]*?dataset\.wrap === 'on'[\s\S]*?renderWrapped\(\)/,
-  'render paints the wrap overlay while wrap is on');
-assert.match(editorJs, /function renderWrapped\(\) \{/,
-  'wrap renderer exists');
-assert.match(editorJs, /function buildWrapMirror\(\) \{[\s\S]*?className = 'syntax-wline'/,
-  'wrap overlay builds one block per source line');
-assert.match(editorJs, /className = 'syntax-wln'/,
-  'wrap overlay numbers each source line');
-assert.match(editorJs, /MAX_WRAP_LINES[\s\S]*?plain\('wrap-size'\)/,
-  'wrap overlay has a line-count budget');
-assert.match(editorJs, /MAX_WRAP_SPANS[\s\S]*?plain\('wrap-size'\)/,
-  'wrap overlay has a token budget');
-assert.match(shared, /export const MAX_WRAP_HIGHLIGHT_CHARS = 256 \* 1024;/,
-  'wrap highlight budget is 256KB');
-
-// Wrap styling: the editor wraps, the gutter hides, both themes inherit it.
-assert.match(css, /html\[data-wrap="on"\] \.text-editor \.editor \{\s*white-space: pre-wrap; overflow-wrap: anywhere;/,
-  'wrapped editor CSS exists');
-assert.match(css, /html\[data-wrap="on"\] \.syntax-gutter \{\s*display: none;/,
-  'gutter hides in wrap mode');
-// Wrap-mode highlighting: the mirror wraps like the textarea and reserves
-// number width on both surfaces so the caret stays aligned with the text.
-assert.match(editorCss, /html\[data-wrap="on"\] \.syntax-mirror \{\s*white-space: pre-wrap;\s*overflow-wrap: anywhere;/,
-  'wrap mirror wraps like the textarea');
-assert.match(editorCss, /html\[data-wrap="on"\] \.syntax-wln \{/,
-  'wrap line numbers have dedicated styles');
-assert.match(editorCss, /html\[data-wrap="on"\] \.text-editor \.editor \{\s*padding-left: calc\(12px \+ var\(--wln-w, 0px\)\);/,
-  'wrapped editor reserves the number width');
+// CodeMirror wraps natively (colors and line numbers included, at any
+// size): the editor's `wrap` property swaps the lineWrapping extension.
+assert.match(editorJs, /wrapping\.of\(wrapOn \? EditorView\.lineWrapping : \[\]\)/,
+  'the editor starts with the current wrap state');
+assert.match(editorJs, /reconfigure\(wrapping, wrapOn \? EditorView\.lineWrapping : \[\]\)/,
+  'toggling wrap reconfigures line wrapping in place');
+assert.ok(editorJs.includes("root.dataset.wrap === 'on'"), 'the editor reads the saved wrap state at startup');
+assert.doesNotMatch(editorJs, /MAX_WRAP|wrap-size/, 'wrap mode has no size budget any more');
 assert.match(css, /\.strip-btn\[aria-pressed="true"\]/,
   'pressed wrap toggle has an active style');
 
@@ -115,18 +84,15 @@ assert.match(css, /\.toolbar \{ min-height: 28px;[^}]*padding: 2px 10px;/,
   'toolbar matches the strip');
 assert.match(treeCss, /\.tree-search \{[^}]*height: 24px;/,
   'tree search input matches the slimmer strip');
-// The mirror overlay paddings must track the editor padding exactly.
-assert.match(css, /\.editor \{[^}]*padding: 12px;/, 'editor padding is compact');
-assert.match(editorCss, /\.syntax-mirror \{[^}]*padding: 12px 12px 12px calc\(var\(--gutter-width\) \+ 12px\);/,
-  'mirror padding tracks the editor padding');
-assert.match(editorCss, /\.syntax-gutter \{[^}]*padding: 12px 8px 12px 0;/,
-  'gutter padding tracks the editor padding');
+// Editor padding stays compact (12px around the text).
+assert.match(editorJs, /'\.cm-content': \{ padding: '12px 0'/, 'editor content has compact vertical padding');
+assert.match(editorJs, /'\.cm-line': \{ padding: '0 12px' \}/, 'editor lines have compact horizontal padding');
 
 // Cache-busted asset versions cover every touched file.
 for (const [asset, version] of [
-  ['style.css', 'windows-v1'],
-  ['app.js', 'windows-v1'],
-  ['text-editor.css', 'wrap-compact-v1'],
+  ['style.css', 'codemirror-v1'],
+  ['app.js', 'codemirror-v1'],
+  ['text-editor.css', 'codemirror-v1'],
   ['tree-view.css', 'wrap-compact-v1'],
 ]) {
   assert.match(html, new RegExp(`\\./${asset.replace('.', '\\.')}\\?v=${version}`),

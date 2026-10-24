@@ -1,6 +1,8 @@
-/* Native editing + bounded syntax mirror: same metrics, no duplicate accessible text. */
+/* Text view: CodeMirror 6 (text-editor.js). Layout and theme colors for the
+   editor chrome live in the editor's own theme; this file sizes the host,
+   styles the scrollbars and search panel, and maps syntax tokens to the
+   shared --syntax-* palette. */
 .text-editor {
-  --gutter-width: 4ch;
   position: relative;
   display: flex;
   flex: 1;
@@ -12,57 +14,73 @@
   font-size: 14px;
   line-height: 24px;
 }
-.text-editor .editor, .syntax-mirror, .syntax-gutter {
-  font: inherit;
-  font-weight: 400;
-  letter-spacing: 0;
-  font-variant-ligatures: none;
+.text-editor .editor { font: inherit; line-height: inherit; }
+.text-editor .cm-editor { flex: 1; min-width: 0; min-height: 0; font-variant-ligatures: none; }
+.text-editor .cm-scroller {
   tab-size: 2;
-  direction: ltr;
-  unicode-bidi: plaintext;
+  scrollbar-color: var(--scroll-thumb) var(--scroll-track);
 }
-.text-editor .editor { position: relative; z-index: 1; margin-left: var(--gutter-width); width: calc(100% - var(--gutter-width)); padding-left: 12px; }
-.syntax-viewport { position: absolute; inset: 0 auto auto 0; overflow: hidden; pointer-events: none; visibility: hidden; }
-.syntax-mirror { position: absolute; top: 0; left: 0; margin: 0; padding: 12px 12px 12px calc(var(--gutter-width) + 12px); white-space: pre; color: var(--editor-text); }
-.syntax-gutter { position: absolute; top: 0; left: 0; width: var(--gutter-width); padding: 12px 8px 12px 0; color: var(--syntax-muted); background: var(--editor-bg); text-align: right; border-right: 1px solid var(--guide); }
-.syntax-gutter .current-line { color: var(--editor-text); }
-.syntax-active-line { position: absolute; left: 0; right: 0; background: var(--tree-hover-bg); }
-.has-syntax .syntax-viewport { visibility: visible; }
-.has-syntax .editor { color: transparent; background: transparent; caret-color: var(--editor-caret); }
-.has-syntax .editor::selection { color: var(--editor-text); background: var(--code-selection-bg); }
+.text-editor .cm-scroller::-webkit-scrollbar { width: 12px; height: 12px; }
+.text-editor .cm-scroller::-webkit-scrollbar-track { background: var(--scroll-track); }
+.text-editor .cm-scroller::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border: 2px solid var(--scroll-track); border-radius: 8px; }
+.text-editor .cm-scroller::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); }
+.text-editor .cm-scroller::-webkit-scrollbar-corner { background: var(--scroll-track); }
+
+/* Syntax tokens (class names come from the editor's highlight style). */
 .syntax-key, .syntax-tag { color: var(--syntax-key); }
 .syntax-string { color: var(--syntax-string); }
 .syntax-number { color: var(--syntax-number); }
 .syntax-boolean, .syntax-entity { color: var(--syntax-boolean); }
 .syntax-attribute { color: var(--syntax-attribute); }
 .syntax-muted, .syntax-comment { color: var(--syntax-muted); }
+
+/* Search panel (Ctrl/Cmd+F): compact, in the app's own control styles. */
+.text-editor .cm-panel.cm-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+}
+.text-editor .cm-panel.cm-search br { display: none; }
+.text-editor .cm-panel.cm-search input.cm-textfield {
+  min-height: 24px;
+  padding: 2px 8px;
+  border: 1px solid var(--button-border);
+  border-radius: 6px;
+  background: var(--editor-bg);
+  color: var(--editor-text);
+  font: inherit;
+}
+.text-editor .cm-panel.cm-search input.cm-textfield:focus { outline: 2px solid var(--editor-focus); outline-offset: 0; }
+.text-editor .cm-panel.cm-search button.cm-button {
+  min-height: 24px;
+  margin: 0;
+  padding: 2px 10px;
+  border: 1px solid var(--button-border);
+  border-radius: 8px;
+  background: var(--button-bg);
+  background-image: none;
+  color: var(--editor-text);
+  font: inherit;
+  font-weight: 600;
+}
+.text-editor .cm-panel.cm-search button.cm-button:hover { border-color: var(--button-hover-border); background: var(--button-hover-bg); }
+.text-editor .cm-panel.cm-search label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+.text-editor .cm-panel.cm-search button[name="close"] {
+  margin-left: auto;
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
+}
+
 .editor-frame[data-view="tree"] .text-editor { display: none; }
-/* Wrap-mode highlighting: the mirror wraps exactly like the textarea, so
-   colors and line numbers survive wrapping. Each source line is a block
-   whose number rides on its first wrapped row; --wln-w reserves the number
-   width on both surfaces so the caret stays aligned with the text. */
-html[data-wrap="on"] .syntax-mirror {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  word-break: normal;
-  padding-left: calc(12px + var(--wln-w, 0px));
-}
-html[data-wrap="on"] .syntax-wline { display: block; }
-html[data-wrap="on"] .syntax-wln {
-  display: inline-block;
-  box-sizing: border-box;
-  width: var(--wln-w, 4ch);
-  margin-left: calc(-1 * var(--wln-w, 4ch));
-  padding-right: 8px;
-  text-align: right;
-  color: var(--syntax-muted);
-  user-select: none;
-}
-html[data-wrap="on"] .text-editor .editor {
-  padding-left: calc(12px + var(--wln-w, 0px));
-}
 .text-editor .empty-state { font-family: ui-sans-serif, system-ui, sans-serif; z-index: 2; }
 @media (forced-colors: active) {
-  .syntax-viewport { display: none; }
-  .has-syntax .editor { color: CanvasText; background: Canvas; caret-color: CanvasText; }
+  .text-editor .cm-selectionBackground { background: Highlight; }
 }
