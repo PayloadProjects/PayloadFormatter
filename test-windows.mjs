@@ -206,7 +206,9 @@ const [html, css, app, build, pkg] = await Promise.all(
   const restore = app.match(/function restoreWindows\(\) \{([\s\S]*?)\n\}\n\nfunction persistWindowList/)?.[1];
   assert.ok(restore && !restore.includes('removeItem(STORAGE_KEY)'),
     'the first-run migration never deletes the legacy key');
-  assert.ok(app.includes('setPayloadText(next.payload'), 'switching swaps the payload');
+  const activate = app.match(/async function activateWindow\([\s\S]*?\n\}/)?.[0];
+  assert.ok(activate?.includes('residentCurrentText(next)') && activate.includes('setPayloadText(text'),
+    'switching swaps the payload (from memory, or loaded from history storage)');
   assert.ok(app.includes('dblclick'), 'rename starts on double-click');
 }
 

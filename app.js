@@ -5,10 +5,15 @@ import { createWindowManager, MAX_WINDOWS } from './window-manager.js';
 import { initEpochPopover } from './epoch-popover.js';
 import {
   getTabId,
+  touchTabHeartbeat,
+  saveEntry,
+  loadEntry,
+  deleteEntries,
   saveWindowHistory,
   loadWindowHistories,
   deleteWindowHistory,
   cleanupStaleHistories,
+  enforceStorageBudget,
   requestPersistence,
 } from './history-store.js';
 
@@ -23,6 +28,14 @@ const MAX_DRAFT_BYTES = 2 * 1024 * 1024;
 // sessionStorage is synchronous with a ~5MB quota, while IndexedDB quotas
 // are in the GB range and writes are async.
 const MAX_HISTORY_PERSIST_BYTES = 20 * 1024 * 1024;
+// History text stays in memory only for what is on screen: the active
+// window's current entry, plus the current entry of this many recently used
+// windows so switching back and forth is instant. Everything else lives in
+// IndexedDB and is loaded when viewed.
+const RECENT_RESIDENT_WINDOWS = 1;
+// Total storage budget is checked again after this many chars are saved.
+const BUDGET_CHECK_CHARS = 50 * 1024 * 1024;
+const HEARTBEAT_MS = 5 * 60 * 1000;
 // Hard ceiling for a single payload: above this the tab risks an out-of-memory
 // crash (the string, its formatted copy, and worker clones add up fast).
 // Refused up front with an honest message instead of dying mid-paste.
@@ -77,6 +90,9 @@ const windowManager = createWindowManager();
 // paste history and is rebound on every window switch.
 let activeWindow = null;
 let history = null;
+// Recently active windows (most recent first) whose current entry stays
+// resident; see RECENT_RESIDENT_WINDOWS.
+let recentWindowIds = [];
 
 const treeController = createTreeController({
   getText: getPayloadText,
@@ -95,10 +111,11 @@ initializeTheme();
 initializeWrap();
 initEpochPopover();
 restoreWindows();
+startHeartbeat();
 // History arrives asynchronously from IndexedDB; the windows above boot
 // synchronously from sessionStorage so the UI is never blocked on it.
-hydrateWindowHistories();
-cleanupStaleHistories();
+// Storage maintenance (closed tabs' leftovers, the size budget) runs after.
+hydrateWindowHistories().then(runStorageMaintenance);
 refreshUi();
 treeController.refresh();
 
@@ -447,24 +464,125 @@ function persistPayloadFor(win, text, isLarge) {
 // browser remembers the decision per origin afterwards.
 let persistenceRequested = false;
 
-// Persists one window's paste history (entries + position) to IndexedDB.
-// Fire-and-forget: a storage failure degrades to session-only history and
-// never risks the visible payload. Entries above MAX_HISTORY_PERSIST_BYTES
-// are dropped (the store keeps the survivors as Blobs past 2MB); the index
-// is remapped to the nearest surviving entry.
-function saveHistoryFor(win) {
-  if (!win || !win.history) return;
-  const snapshot = win.history.toPersistable(
-    (text) => text.length <= MAX_HISTORY_PERSIST_BYTES && utf8ByteLength(text) <= MAX_HISTORY_PERSIST_BYTES,
-  );
-  if (!persistenceRequested && snapshot.entries.some((text) => text.length > MAX_DRAFT_BYTES)) {
-    persistenceRequested = true;
-    requestPersistence();
-  }
-  const task = saveWindowHistory(tabId, win.id, snapshot);
+function trackSave(task) {
   pendingHistorySaves.add(task);
   const done = () => pendingHistorySaves.delete(task);
   task.then(done, done);
+  return task;
+}
+
+// Persists one window's paste history to IndexedDB: each new entry is saved
+// once (compressed) as its own record, then the window's small entry list
+// (ids + position) is rewritten. Entries that left the history are deleted.
+// Fire-and-forget: a storage failure degrades to session-only history and
+// never risks the visible payload. Entries above MAX_HISTORY_PERSIST_BYTES
+// are never persisted (they stay in memory for this session only).
+function saveHistoryFor(win) {
+  if (!win || !win.history) return;
+  for (const entry of win.history.entries()) {
+    if (entry.state === 'memory' && !entry.saving) saveEntryFor(win, entry);
+  }
+  const garbage = win.history.takeGarbage();
+  if (garbage.length) trackSave(deleteEntries(garbage));
+  const snapshot = win.history.toPersistable((entry) => entry.state !== 'skipped');
+  trackSave(saveWindowHistory(tabId, win.id, snapshot));
+}
+
+let charsSinceBudgetCheck = 0;
+
+function saveEntryFor(win, entry) {
+  const text = entry.text;
+  if (typeof text !== 'string') return;
+  if (text.length > MAX_HISTORY_PERSIST_BYTES || utf8ByteLength(text) > MAX_HISTORY_PERSIST_BYTES) {
+    entry.state = 'skipped';
+    return;
+  }
+  if (!persistenceRequested && text.length > MAX_DRAFT_BYTES) {
+    persistenceRequested = true;
+    requestPersistence();
+  }
+  entry.saving = true;
+  trackSave(saveEntry(tabId, win.id, entry.id, text).then((ok) => {
+    entry.saving = false;
+    // A failed write keeps the entry in memory (session-only), where the
+    // history's memory budget still bounds it.
+    entry.state = ok ? 'saved' : 'skipped';
+    if (!ok) return;
+    releaseIdle(win);
+    charsSinceBudgetCheck += text.length;
+    if (charsSinceBudgetCheck >= BUDGET_CHECK_CHARS) {
+      charsSinceBudgetCheck = 0;
+      trackSave(enforceStorageBudget({ protect: protectedEntryIds() }));
+    }
+  }));
+}
+
+// Frees history text this window doesn't need on screen. Saved entries can
+// always be loaded back; unsaved ones are kept until their write lands.
+function releaseIdle(win) {
+  if (!win || !win.history || !windowManager.getWindow(win.id)) return;
+  const keepCurrent = win === activeWindow || recentWindowIds.includes(win.id);
+  win.history.release({ keepCurrent });
+}
+
+function rememberRecentWindow(win) {
+  recentWindowIds = [win.id, ...recentWindowIds.filter((id) => id !== win.id)];
+  const dropped = recentWindowIds.slice(RECENT_RESIDENT_WINDOWS);
+  recentWindowIds = recentWindowIds.slice(0, RECENT_RESIDENT_WINDOWS);
+  releaseIdle(win);
+  for (const id of dropped) releaseIdle(windowManager.getWindow(id));
+}
+
+// What is on screen in this tab never gets evicted by the storage budget.
+function protectedEntryIds() {
+  return windowManager.windows
+    .map((win) => win.history.currentEntry()?.id)
+    .filter(Boolean);
+}
+
+// Current text of a window when it is already in memory, else null.
+function residentCurrentText(win) {
+  if (win.payload) return win.payload;
+  const entry = win.history.currentEntry();
+  if (!entry) return '';
+  return entry.text;
+}
+
+// Loads a window's current entry from storage. An entry that is gone
+// (evicted by the budget, or storage failed) is dropped from the history
+// and the previous one is tried instead.
+async function loadCurrentText(win) {
+  const h = win.history;
+  while (h.size() > 0) {
+    const entry = h.currentEntry();
+    if (!entry) return '';
+    if (entry.text !== null) return entry.text;
+    const text = await loadEntry(entry.id);
+    if (text !== null && text.length === entry.chars) {
+      h.setText(entry, text);
+      return text;
+    }
+    h.removeAt(h.index());
+    saveHistoryFor(win);
+  }
+  return '';
+}
+
+function startHeartbeat() {
+  touchTabHeartbeat(tabId);
+  const timer = setInterval(() => touchTabHeartbeat(tabId), HEARTBEAT_MS);
+  // Node (tests) must not stay alive for this timer.
+  timer?.unref?.();
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') touchTabHeartbeat(tabId);
+  });
+}
+
+function runStorageMaintenance() {
+  return trackSave(
+    cleanupStaleHistories({ tabId })
+      .then(() => enforceStorageBudget({ protect: protectedEntryIds() })),
+  );
 }
 
 // Async companion to restoreWindows: loads every window's paste history and
@@ -491,17 +609,28 @@ async function hydrateWindowHistories() {
         continue;
       }
       win.history.restore(record);
-      // A window whose draft didn't survive (over the 2MB sessionStorage cap)
-      // still gets its payload back when history persisted it: seed from the
-      // restored position. A paste during hydration wins via the revision
-      // guard above, and a seeded draft (payload non-empty) is left alone.
-      if (!win.payload && win.history.size() > 0) {
-        const text = win.history.current();
-        if (text) {
-          win.payload = text;
-          if (win === activeWindow) setPayloadText(text);
+      // Legacy records carried their text inline: re-save them as entries.
+      if (win.history.entries().some((entry) => entry.state === 'memory')) saveHistoryFor(win);
+      // Only the entry lists were loaded. A window whose draft didn't survive
+      // (over the 2MB sessionStorage cap) gets its payload from history: the
+      // active one now, the others when they are switched to. A paste during
+      // hydration wins via the revision guards, and a seeded draft (payload
+      // non-empty) is left alone.
+      if (win === activeWindow && !win.payload && win.history.size() > 0) {
+        const startedRevision = editRevision;
+        const text = await loadCurrentText(win);
+        if (text && win === activeWindow && editRevision === startedRevision
+            && !getPayloadText()) {
+          setPayloadText(text);
         }
       }
+      // An inactive window's draft duplicates its current history entry
+      // (both are written on switch-away): drop the in-memory copy and load
+      // from history when the window is opened.
+      if (win !== activeWindow && win.payload && win.history.currentEntry()?.chars === win.payload.length) {
+        win.payload = null;
+      }
+      releaseIdle(win);
     }
     syncHistoryNav();
   } finally {
@@ -539,7 +668,7 @@ function restoreTextUi(win) {
   } catch (_) { /* offsets may exceed a truncated large-mode preview */ }
 }
 
-function activateWindow(id, { stash = true } = {}) {
+async function activateWindow(id, { stash = true } = {}) {
   const next = windowManager.getWindow(id);
   if (!next || busy) return;
   if (activeWindow && next.id === activeWindow.id) return;
@@ -553,17 +682,41 @@ function activateWindow(id, { stash = true } = {}) {
     stashTextUi(activeWindow);
     stashTreeUi(activeWindow);
     const text = getPayloadText();
-    activeWindow.payload = text;
     persistPayloadFor(activeWindow, text, inLargeMode());
+    // The flush above made the history's current entry the visible text, so
+    // the window needs no separate copy: it is reloaded from history (or
+    // kept resident while it is a recent window) when switched back to.
+    activeWindow.payload = history.current() === text ? null : text;
   }
+  const outgoing = activeWindow;
   activeWindow = next;
   history = next.history;
   windowManager.setActive(id);
-  setPayloadText(next.payload || '', { treeRestore: next.ui.tree });
-  restoreTextUi(next);
+  if (outgoing && windowManager.getWindow(outgoing.id)) rememberRecentWindow(outgoing);
+  recentWindowIds = recentWindowIds.filter((recentId) => recentId !== next.id);
   renderWindowBar();
-  syncHistoryNav();
   persistWindowList();
+
+  let text = residentCurrentText(next);
+  if (text === null) {
+    // The window's payload lives in storage: block edits and actions while
+    // it loads so nothing lands in the wrong window.
+    setBusy(true);
+    if (inLargeMode()) exitLargeMode();
+    editor.value = '';
+    editor.readOnly = true;
+    setStatus(`Loading ${next.name}…`);
+    try {
+      text = await loadCurrentText(next);
+    } finally {
+      editor.readOnly = false;
+      setBusy(false);
+    }
+  }
+  next.payload = null;
+  setPayloadText(text || '', { treeRestore: next.ui.tree });
+  restoreTextUi(next);
+  syncHistoryNav();
   setStatus(`Switched to ${next.name}.`, 'success');
 }
 
@@ -591,8 +744,9 @@ function closeWindowById(id) {
     return;
   }
   clearWindowDraft(target.id);
+  recentWindowIds = recentWindowIds.filter((recentId) => recentId !== target.id);
   // Drop its persisted history too: closing a window forgets its datasets.
-  deleteWindowHistory(tabId, target.id);
+  trackSave(deleteWindowHistory(tabId, target.id));
   // A pending typing update belongs to the closed window; never let it fire
   // against whoever becomes active next. But when closing an *inactive*
   // window the pending update (if any) belongs to the still-active window,
@@ -686,6 +840,9 @@ function pushHistory() {
   if (history.push(getPayloadText())) {
     syncHistoryNav();
     saveHistoryFor(activeWindow);
+    // The entry that was on screen is no longer current: free its text
+    // (immediately when already saved, else once its write lands).
+    releaseIdle(activeWindow);
   }
 }
 
@@ -731,14 +888,48 @@ function setPayloadText(text, { treeRestore } = {}) {
   treeController.refresh(treeRestore);
 }
 
-function navigateHistory(direction) {
+async function navigateHistory(direction) {
   if (busy) return;
-  const text = direction < 0 ? history.back() : history.forward();
-  if (text === null) return;
+  const win = activeWindow;
+  const h = history;
+  let target = h.peek(direction);
+  if (target < 0) return;
+  let entry = h.entryAt(target);
+  let text = entry.text;
+  if (text === null) {
+    // Released entry: load it from storage before moving. Entries that are
+    // gone (evicted by the storage budget) are dropped and skipped.
+    setBusy(true);
+    setStatus('Loading payload…');
+    try {
+      while (target >= 0 && text === null) {
+        const loaded = await loadEntry(entry.id);
+        if (loaded !== null && loaded.length === entry.chars) {
+          h.setText(entry, loaded);
+          text = loaded;
+          break;
+        }
+        h.removeAt(target);
+        target = h.peek(direction);
+        entry = target >= 0 ? h.entryAt(target) : null;
+        text = entry ? entry.text : null;
+      }
+    } finally {
+      setBusy(false);
+    }
+    if (target < 0) {
+      saveHistoryFor(win);
+      syncHistoryNav();
+      setStatus('That payload is no longer stored (removed to free space).', 'warning');
+      return;
+    }
+  }
+  h.moveTo(target);
   setPayloadText(text);
+  releaseIdle(win);
   syncHistoryNav();
   // The position in history changed; persist it so a refresh restores it.
-  saveHistoryFor(activeWindow);
+  saveHistoryFor(win);
   setStatus(direction < 0 ? 'Restored previous payload.' : 'Restored next payload.', 'success');
 }
 
@@ -889,8 +1080,12 @@ async function formatCurrentPayload() {
     }
     saveDraftNow();
     // Formatting rewrites the payload in place: keep it on the current
-    // history entry instead of recording a second entry per paste.
-    if (history.updateCurrent(getPayloadText())) syncHistoryNav();
+    // history entry instead of recording a second entry per paste, and
+    // save it so a refresh brings back the formatted version.
+    if (history.updateCurrent(getPayloadText())) {
+      syncHistoryNav();
+      saveHistoryFor(activeWindow);
+    }
     await treeController.refresh();
 
     if (result.bestEffort) {
@@ -1311,4 +1506,12 @@ export function __historyHydrated() {
 
 export function __getTabId() {
   return tabId;
+}
+
+// Chars of history/payload text held in memory across all windows.
+export function __residentHistoryChars() {
+  return windowManager.windows.reduce(
+    (sum, win) => sum + win.history.residentChars() + (win.payload ? win.payload.length : 0),
+    0,
+  );
 }

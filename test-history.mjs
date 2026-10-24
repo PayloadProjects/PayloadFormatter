@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createPayloadHistory } from './payload-history.js';
 
+// back()/forward() return the entry; its text is what the user sees.
+const t = (entry) => (entry ? entry.text : null);
+
 const [html, css, app, managerJs, build, pkg] = await Promise.all(
   ['index.html', 'style.css', 'app.js', 'window-manager.js', 'build.mjs', 'package.json']
     .map((file) => readFile(new URL(file, import.meta.url), 'utf8')),
@@ -10,8 +13,8 @@ const [html, css, app, managerJs, build, pkg] = await Promise.all(
 // --- Model: basic back/forward navigation ---
 {
   const history = createPayloadHistory();
-  assert.equal(history.back(), null, 'back on empty history returns null');
-  assert.equal(history.forward(), null, 'forward on empty history returns null');
+  assert.equal(t(history.back()), null, 'back on empty history returns null');
+  assert.equal(t(history.forward()), null, 'forward on empty history returns null');
   assert.equal(history.canBack(), false);
   assert.equal(history.canForward(), false);
 
@@ -23,15 +26,15 @@ const [html, css, app, managerJs, build, pkg] = await Promise.all(
   assert.equal(history.canBack(), true);
   assert.equal(history.canForward(), false);
 
-  assert.equal(history.back(), '<b>2</b>');
-  assert.equal(history.back(), '{"a":1}');
-  assert.equal(history.back(), null, 'back past the oldest returns null');
+  assert.equal(t(history.back()), '<b>2</b>');
+  assert.equal(t(history.back()), '{"a":1}');
+  assert.equal(t(history.back()), null, 'back past the oldest returns null');
   assert.equal(history.canBack(), false);
   assert.equal(history.canForward(), true);
 
-  assert.equal(history.forward(), '<b>2</b>');
-  assert.equal(history.forward(), '{"c":3}');
-  assert.equal(history.forward(), null, 'forward past the newest returns null');
+  assert.equal(t(history.forward()), '<b>2</b>');
+  assert.equal(t(history.forward()), '{"c":3}');
+  assert.equal(t(history.forward()), null, 'forward past the newest returns null');
 }
 
 // --- Model: consecutive duplicates are ignored ---
@@ -50,13 +53,13 @@ const [html, css, app, managerJs, build, pkg] = await Promise.all(
   history.push('a');
   history.push('b');
   history.push('c');
-  history.back();
-  history.back();
+  t(history.back());
+  t(history.back());
   assert.equal(history.push('d'), true);
   assert.equal(history.size(), 2, 'forward entries dropped');
-  assert.equal(history.back(), 'a');
-  assert.equal(history.forward(), 'd');
-  assert.equal(history.forward(), null);
+  assert.equal(t(history.back()), 'a');
+  assert.equal(t(history.forward()), 'd');
+  assert.equal(t(history.forward()), null);
 }
 
 // --- Model: updateCurrent edits the entry in place (typing/formatting) ---
@@ -67,8 +70,8 @@ const [html, css, app, managerJs, build, pkg] = await Promise.all(
   assert.equal(history.updateCurrent('{"b": 2}'), true, 'format rewrites the current entry');
   assert.equal(history.size(), 2, 'no new entry for in-place edits');
   assert.equal(history.current(), '{"b": 2}');
-  assert.equal(history.back(), '{"a":1}');
-  assert.equal(history.forward(), '{"b": 2}');
+  assert.equal(t(history.back()), '{"a":1}');
+  assert.equal(t(history.forward()), '{"b": 2}');
 
   assert.equal(history.updateCurrent('{"b": 2}'), false, 'unchanged text is a no-op');
 }
@@ -78,7 +81,7 @@ const [html, css, app, managerJs, build, pkg] = await Promise.all(
   const history = createPayloadHistory();
   history.push('a');
   history.push('b');
-  history.back();
+  t(history.back());
   history.updateCurrent('a-edited');
   assert.equal(history.size(), 1);
   assert.equal(history.current(), 'a-edited');
@@ -92,10 +95,10 @@ const [html, css, app, managerJs, build, pkg] = await Promise.all(
   history.push('');        // clear
   history.push('{"b":2}'); // paste B
   assert.equal(history.canBack(), true);
-  assert.equal(history.back(), '{"a":1}', 'back skips the empty clear state');
+  assert.equal(t(history.back()), '{"a":1}', 'back skips the empty clear state');
   assert.equal(history.canBack(), false);
   assert.equal(history.canForward(), true);
-  assert.equal(history.forward(), '{"b":2}', 'forward skips the empty clear state');
+  assert.equal(t(history.forward()), '{"b":2}', 'forward skips the empty clear state');
   assert.equal(history.canForward(), false);
 }
 
@@ -105,7 +108,7 @@ const [html, css, app, managerJs, build, pkg] = await Promise.all(
   history.push('{"a":1}');
   history.push('');
   assert.equal(history.canBack(), true);
-  assert.equal(history.back(), '{"a":1}');
+  assert.equal(t(history.back()), '{"a":1}');
   assert.equal(history.canForward(), false, 'nothing navigable past the trailing clear state');
 }
 
@@ -116,7 +119,7 @@ const [html, css, app, managerJs, build, pkg] = await Promise.all(
   assert.equal(history.push(''), true);
   assert.equal(history.push(''), false, 'duplicate empty state is a no-op');
   assert.equal(history.size(), 2);
-  assert.equal(history.back(), '{"a":1}');
+  assert.equal(t(history.back()), '{"a":1}');
 }
 
 // --- Model: updateCurrent on an empty history records the first entry ---
@@ -141,9 +144,9 @@ const [html, css, app, managerJs, build, pkg] = await Promise.all(
   history.push('c');
   history.push('d');
   assert.equal(history.size(), 3);
-  assert.equal(history.back(), 'c');
-  assert.equal(history.back(), 'b');
-  assert.equal(history.back(), null, 'evicted entry is gone');
+  assert.equal(t(history.back()), 'c');
+  assert.equal(t(history.back()), 'b');
+  assert.equal(t(history.back()), null, 'evicted entry is gone');
   assert.equal(history.canBack(), false);
 
   const sized = createPayloadHistory({ maxEntries: 100, maxBytes: 4 });
@@ -152,6 +155,64 @@ const [html, css, app, managerJs, build, pkg] = await Promise.all(
   sized.push('cc');
   assert.ok(sized.size() <= 2, 'byte budget evicts oldest entries');
   assert.equal(sized.current(), 'cc', 'newest entry survives eviction');
+}
+
+// --- Model: saved entries release their text; unsaved ones never do ---
+{
+  const history = createPayloadHistory();
+  history.push('a'); history.push('b'); history.push('c');
+  const [a, b, c] = history.entries();
+  a.state = 'saved'; c.state = 'saved';
+  history.release();
+  assert.equal(a.text, null, 'saved non-current entry is released');
+  assert.equal(b.text, 'b', 'unsaved entry stays in memory until its write lands');
+  assert.equal(c.text, 'c', 'current entry stays on screen');
+  history.release({ keepCurrent: false });
+  assert.equal(c.text, null, 'inactive window releases its current entry too');
+  assert.equal(history.current(), null, 'released current reads as null (load from storage)');
+  history.setText(c, 'wrong length');
+  assert.equal(c.text, null, 'setText rejects text that does not match the entry');
+  history.setText(c, 'c');
+  assert.equal(history.current(), 'c', 'loaded text makes the entry resident again');
+  assert.equal(history.push('c'), false, 'duplicate check still works on a reloaded entry');
+}
+
+// --- Model: entries leaving the history are queued for storage deletion ---
+{
+  const history = createPayloadHistory({ maxEntries: 2 });
+  history.push('a'); history.push('b');
+  const [a, b] = history.entries();
+  history.push('c'); // evicts a
+  assert.deepEqual(history.takeGarbage(), [a.id], 'evicted entry queued for deletion');
+  history.back();
+  history.push('d'); // truncates c
+  assert.equal(history.takeGarbage().length, 1, 'truncated forward entry queued for deletion');
+  history.updateCurrent('d2'); // replaces d
+  assert.equal(history.takeGarbage().length, 1, 'replaced (formatted) entry queued for deletion');
+  assert.deepEqual(history.takeGarbage(), [], 'garbage drains once');
+  assert.ok(b.id, 'entries carry storage ids');
+
+  const roomy = createPayloadHistory();
+  roomy.push('a');
+  roomy.push('');
+  roomy.push('');
+  assert.deepEqual(roomy.takeGarbage(), [], 'empty clear entries need no storage');
+  assert.equal(roomy.entries()[1].id, '', 'clear entries have no storage id');
+}
+
+// --- Model: peek/moveTo/removeAt support loading before navigating ---
+{
+  const history = createPayloadHistory();
+  history.push('a'); history.push('b'); history.push(''); history.push('d');
+  const target = history.peek(-1);
+  assert.equal(history.entryAt(target).text, 'b', 'peek skips the clear state');
+  assert.equal(history.current(), 'd', 'peek does not move');
+  history.removeAt(target); // b vanished from storage
+  assert.equal(history.entryAt(history.peek(-1)).text, 'a', 'after removal the next stop is a');
+  assert.equal(history.moveTo(history.peek(-1)).text, 'a');
+  assert.equal(history.canBack(), false);
+  history.removeAt(history.index());
+  assert.equal(history.current(), '', 'removing the current entry lands next to it');
 }
 
 // --- Wiring: history nav lives in the toolbar, before the action group ---
