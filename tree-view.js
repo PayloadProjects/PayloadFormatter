@@ -9,8 +9,9 @@ export const TREE_MAX_CHARS = { json: 20_000_000, xml: 10_000_000 };
 const CHUNK_SIZE = 200;
 const AUTO_OPEN_MAX_CHILDREN = 25;
 const EXPAND_ALL_ROW_BUDGET = 6000;
-const MAX_MATCHES = 1000;
-const SEARCH_VISIT_BUDGET = 400_000;
+// Search walks the whole payload; matches are kept (as child-index paths)
+// up to this many so Back/Next can reach every one of them.
+const MAX_MATCHES = 100_000;
 // reveal() materializes rows to reach a search match: cap contiguous
 // rendering at the same scale as expand-all, and render a bounded window
 // around farther matches instead of every row from 0..index (a 130k-row
@@ -132,24 +133,197 @@ export function searchNeedles(query) {
   return inner && inner !== base ? [base, inner] : [base];
 }
 
-export function nodeMatches(node, needles) {
-  return needles.some((query) => nodeMatchesOne(node, query));
+// A needle with any of these characters may only match the row as it is
+// displayed (quotes, escapes, `key: value`, `attr="value"`, entities), so
+// such searches also test each row's display text. Plain needles match the
+// raw keys and values alone, which is much cheaper on large payloads.
+const DISPLAY_CHARS = /["'\\:=<>&{}[\]]|\s/;
+
+export function needsDisplayMatch(needles) {
+  return needles.some((needle) => DISPLAY_CHARS.test(needle));
 }
 
-function nodeMatchesOne(node, query) {
-  if (node.kind === 'json') {
-    if (node.key !== null && String(node.key).toLowerCase().includes(query)) return true;
-    if (node.type === 'array' || node.type === 'object') return false;
-    return String(node.value).toLowerCase().includes(query);
+const includesAny = (text, needles) => needles.some((needle) => text.includes(needle));
+
+// Display matching builds each row's text, which is costly across a whole
+// payload. Most rows are ruled out first by a "core": the longest plain run
+// in a needle (`user7` in `"name": "user7"`). A row's display text can only
+// contain the needle if its raw key/value text contains that core, except
+// where JSON escaping invents characters (control characters, see
+// CONTROL_CHARS), which always take the full check.
+const CORE_SEPARATORS = /["'\\:=<>&;#{}[\],]|\s/;
+const CONTROL_CHARS = /[\u0000-\u001f]/;
+
+function coreOf(needle) {
+  let best = '';
+  for (const part of needle.split(CORE_SEPARATORS)) if (part.length > best.length) best = part;
+  return best.length >= 2 ? best : '';
+}
+
+// null when no needle needs display matching; else, per needle, the cores
+// any matching row must contain (the needle's, and its XML-decoded form's).
+function displayContext(needles) {
+  if (!needsDisplayMatch(needles)) return null;
+  return needles.map((needle) => [coreOf(needle), coreOf(decodeXml(needle))]);
+}
+
+function mayMatchDisplay(context, haystack) {
+  return context.some(([core, decoded]) => !core || !decoded || haystack.includes(core) || haystack.includes(decoded));
+}
+
+// Same digits as the rows' toLocaleString() counts, without creating a new
+// formatter per call (that alone made a whole-payload search 30x slower).
+const countFormat = new Intl.NumberFormat();
+
+// The value as its tree row shows it (full length, never the preview).
+function jsonDisplayValue(value) {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return value.length ? `[${countFormat.format(value.length)}]` : '[]';
+  if (typeof value === 'object') {
+    const count = Object.keys(value).length;
+    return count ? `{${countFormat.format(count)}}` : '{}';
   }
-  if (node.key && node.key.toLowerCase().includes(query)) return true;
-  if (node.text && node.text.toLowerCase().includes(query)) return true;
-  if (node.attrs) {
-    for (const [name, value] of node.attrs) {
-      if (name.toLowerCase().includes(query) || value.toLowerCase().includes(query)) return true;
+  return typeof value === 'string' ? JSON.stringify(value) : String(value);
+}
+
+// One JSON member: its key (array positions are not searchable: they are
+// the tree's numbering, not payload data), its primitive value, and, for
+// display needles, the row text `"key": value`.
+export function jsonValueMatches(key, value, inArray, needles, context = displayContext(needles)) {
+  const keyed = key !== null && !inArray;
+  const keyText = keyed ? String(key).toLowerCase() : '';
+  if (keyed && includesAny(keyText, needles)) return true;
+  const primitive = value === null || typeof value !== 'object';
+  const valueText = primitive ? String(value).toLowerCase() : '';
+  if (primitive && includesAny(valueText, needles)) return true;
+  if (!context) return false;
+  // Containers display their child count (`{3}`, `[37,000]`).
+  const shown = primitive ? null : jsonDisplayValue(value);
+  const escaped = (keyed && CONTROL_CHARS.test(keyText)) || (typeof value === 'string' && CONTROL_CHARS.test(value));
+  if (!escaped && !mayMatchDisplay(context, `${keyText}\u0000${primitive ? valueText : shown}`)) return false;
+  const display = primitive ? jsonDisplayValue(value) : shown;
+  const row = keyed ? `${JSON.stringify(key)}: ${display}` : display;
+  return includesAny(row.toLowerCase(), needles);
+}
+
+const escapeXml = (text) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const decodeXml = (text) => text.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+  .replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+
+// The XML row as displayed (see xmlLabel), full length.
+function xmlRowText(node) {
+  switch (node.type) {
+    case 'element': {
+      const attrs = node.attrs.map(([name, value]) => ` ${name}="${value}"`).join('');
+      if (node.container) return `<${node.key}${attrs}> (${node.count.toLocaleString()})`;
+      if (node.text !== undefined) {
+        const text = node.cdata ? `<![CDATA[${node.text}]]>` : node.text;
+        return `<${node.key}${attrs}>${text}</${node.key}>`;
+      }
+      return `<${node.key}${attrs}/>`;
+    }
+    case 'cdata': return `<![CDATA[${node.text}]]>`;
+    case 'comment': return `<!-- ${node.text} -->`;
+    case 'pi': return `<?${node.key} ${node.text}?>`;
+    default: return node.text || '';
+  }
+}
+
+function xmlNodeMatches(node, needles, context) {
+  const raw = [node.key, node.text];
+  for (const [name, value] of node.attrs || []) raw.push(name, value);
+  for (const text of raw) {
+    if (text && includesAny(text.toLowerCase(), needles)) return true;
+  }
+  if (!context) return false;
+  // The row text adds only markup, the child count and the CDATA marker.
+  const cdata = node.cdata || node.type === 'cdata' ? '\u0000cdata' : '';
+  const haystack = `${raw.filter(Boolean).join('\u0000')}\u0000${node.count}${cdata}`.toLowerCase();
+  if (!mayMatchDisplay(context, haystack)) return false;
+  // Display text, plus entity-escaped text so a query copied from the raw
+  // XML (`Tom &amp; Jerry`) still finds the decoded value.
+  const row = xmlRowText(node);
+  return includesAny(row.toLowerCase(), needles) || includesAny(escapeXml(row).toLowerCase(), needles);
+}
+
+export function nodeMatches(node, needles) {
+  const context = displayContext(needles);
+  return node.kind === 'json'
+    ? jsonValueMatches(node.key, node.value, node.inArray, needles, context)
+    : xmlNodeMatches(node, needles, context);
+}
+
+// Variants of the needles as they can appear on screen: JSON strings show
+// escaped quotes/backslashes; XML shows entities decoded. Used to paint
+// highlights for matches found on the raw value.
+function displayNeedles(needles) {
+  const all = new Set(needles);
+  for (const needle of needles) {
+    all.add(JSON.stringify(needle).slice(1, -1));
+    all.add(decodeXml(needle));
+  }
+  return [...all].filter(Boolean);
+}
+
+// Every match in a parsed JSON value, walking the plain data (no tree node
+// objects): fast enough to cover multi-megabyte payloads in one pass.
+function findJsonMatches(rootValue, needles) {
+  const context = displayContext(needles);
+  const matches = [];
+  if (jsonValueMatches(null, rootValue, false, needles, context)) matches.push([]);
+  const frame = (value, index) => {
+    const keys = Array.isArray(value) ? null : Object.keys(value);
+    return { value, keys, count: keys ? keys.length : value.length, next: 0, index };
+  };
+  const frames = rootValue !== null && typeof rootValue === 'object' ? [frame(rootValue, -1)] : [];
+  while (frames.length) {
+    const top = frames[frames.length - 1];
+    if (top.next >= top.count) {
+      frames.pop();
+      continue;
+    }
+    const index = top.next;
+    top.next += 1;
+    const key = top.keys ? top.keys[index] : index;
+    const child = top.value[key];
+    if (jsonValueMatches(key, child, !top.keys, needles, context)) {
+      if (matches.length >= MAX_MATCHES) return { matches, truncated: true };
+      const path = [];
+      for (let depth = 1; depth < frames.length; depth += 1) path.push(frames[depth].index);
+      path.push(index);
+      matches.push(path);
+    }
+    if (child !== null && typeof child === 'object') {
+      const next = frame(child, index);
+      if (next.count) frames.push(next);
     }
   }
-  return false;
+  return { matches, truncated: false };
+}
+
+// XML keeps the tree's own child model (text/comment/CDATA children).
+function findXmlMatches(root, needles) {
+  const context = displayContext(needles);
+  const matches = [];
+  if (xmlNodeMatches(root, needles, context)) matches.push([]);
+  const stack = [{ node: root, next: 0, path: [] }];
+  while (stack.length) {
+    const top = stack[stack.length - 1];
+    if (top.next >= top.node.count) {
+      stack.pop();
+      continue;
+    }
+    const index = top.next;
+    top.next += 1;
+    const child = childAt(top.node, index);
+    const path = top.path.concat(index);
+    if (xmlNodeMatches(child, needles, context)) {
+      if (matches.length >= MAX_MATCHES) return { matches, truncated: true };
+      matches.push(path);
+    }
+    if (child.container) stack.push({ node: child, next: 0, path });
+  }
+  return { matches, truncated: false };
 }
 
 export function parseTree(text, mode, { DOMParserImpl } = {}) {
@@ -328,6 +502,8 @@ export function createTreeView(container, { onCopyPath } = {}) {
   let hitLi = null;
   let matchPaths = new Set();
   let needles = [];
+  // needles plus their on-screen forms (escaped JSON, decoded XML).
+  let paintNeedles = [];
 
   container.addEventListener('click', onClick);
   container.addEventListener('keydown', onKeydown);
@@ -343,6 +519,7 @@ export function createTreeView(container, { onCopyPath } = {}) {
     hitLi = null;
     matchPaths.clear();
     needles = [];
+    paintNeedles = [];
   }
 
   function showMessage(title, detail, tone = '') {
@@ -401,7 +578,11 @@ export function createTreeView(container, { onCopyPath } = {}) {
 
   // Search hits highlight the found text itself, never the whole row.
   // Unwrapping first keeps repainting (new search, stepped hit, re-render)
-  // from ever nesting highlight spans.
+  // from ever nesting highlight spans. Matching runs over the row's whole
+  // visible text, so a `"key": "value"` or `attr="value"` hit spanning
+  // several label spans is painted too. The array-position label, toggle
+  // and copy button are not payload text and are never painted.
+  const UNPAINTED = '.tree-copy, .tree-toggle, .tree-index';
   function paintRowHits(li) {
     const row = li.firstElementChild;
     if (!row) return;
@@ -412,15 +593,30 @@ export function createTreeView(container, { onCopyPath } = {}) {
     if (!needles.length || !matchPaths.has(li._searchPath)) return;
     const walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT);
     const texts = [];
+    const starts = [];
+    let full = '';
     let textNode;
-    while ((textNode = walker.nextNode())) texts.push(textNode);
-    for (const node of texts) {
-      const ranges = highlightRanges(node.nodeValue, needles);
-      if (!ranges) continue;
+    while ((textNode = walker.nextNode())) {
+      if (textNode.parentElement?.closest(UNPAINTED)) continue;
+      texts.push(textNode);
+      starts.push(full.length);
+      full += textNode.nodeValue;
+    }
+    // Labels separate `key:` and value with a no-break space.
+    const ranges = highlightRanges(full.replace(/\u00a0/g, ' '), paintNeedles);
+    if (!ranges) return;
+    for (let i = texts.length - 1; i >= 0; i -= 1) {
+      const node = texts[i];
       const value = node.nodeValue;
+      const from = starts[i];
+      const to = from + value.length;
+      const local = ranges
+        .filter(([start, end]) => start < to && end > from)
+        .map(([start, end]) => [Math.max(start, from) - from, Math.min(end, to) - from]);
+      if (!local.length) continue;
       const frag = document.createDocumentFragment();
       let cursor = 0;
-      for (const [start, end] of ranges) {
+      for (const [start, end] of local) {
         if (start > cursor) frag.append(document.createTextNode(value.slice(cursor, start)));
         const mark = document.createElement('span');
         mark.className = 'tree-hit-text';
@@ -431,6 +627,21 @@ export function createTreeView(container, { onCopyPath } = {}) {
       if (cursor < value.length) frag.append(document.createTextNode(value.slice(cursor)));
       node.replaceWith(frag);
     }
+  }
+
+  // A hit inside the hidden part of a long string: show the full text so the
+  // match is actually visible, then repaint the highlight.
+  function expandHiddenHit(li) {
+    let expanded = false;
+    for (const element of li.firstElementChild.querySelectorAll('.tree-long:not(.expanded)')) {
+      const shown = element.textContent.toLowerCase();
+      const full = element._show(element._full, false).toLowerCase();
+      if (paintNeedles.some((needle) => full.includes(needle) && !shown.includes(needle))) {
+        toggleLong(element);
+        expanded = true;
+      }
+    }
+    if (expanded) paintRowHits(li);
   }
 
   function renderChunk(li, upTo) {
@@ -653,6 +864,7 @@ export function createTreeView(container, { onCopyPath } = {}) {
     hitLi = li;
     li.classList.add('tree-hit');
     li.setAttribute('aria-current', 'true');
+    expandHiddenHit(li);
     li.firstElementChild.scrollIntoView({ block: 'center' });
   }
 
@@ -773,26 +985,12 @@ export function createTreeView(container, { onCopyPath } = {}) {
       lastTruncated = false;
       matchPaths.clear();
       needles = searchNeedles(query);
+      paintNeedles = displayNeedles(needles);
       if (needles.length && root) {
-        if (nodeMatches(root, needles)) matches.push([]);
-        const stack = [{ node: root, next: 0, path: [] }];
-        let visits = 0;
-        while (stack.length) {
-          if (visits >= SEARCH_VISIT_BUDGET || matches.length >= MAX_MATCHES) break;
-          const frame = stack[stack.length - 1];
-          if (frame.next >= frame.node.count) {
-            stack.pop();
-            continue;
-          }
-          const index = frame.next;
-          frame.next += 1;
-          visits += 1;
-          const child = childAt(frame.node, index);
-          const path = frame.path.concat(index);
-          if (nodeMatches(child, needles)) matches.push(path);
-          if (child.container) stack.push({ node: child, next: 0, path });
-        }
-        lastTruncated = stack.length > 0;
+        // The whole payload is searched; only the match list is capped.
+        const found = root.kind === 'json' ? findJsonMatches(root.value, needles) : findXmlMatches(root, needles);
+        matches = found.matches;
+        lastTruncated = found.truncated;
         matchPaths = new Set(matches.map(path => path.join('/')));
       }
       // Single repaint pass over existing rows; never expand/materialize the

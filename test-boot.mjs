@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { shimLayout } from './test-support.mjs';
 import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
 
@@ -9,7 +10,8 @@ import { JSDOM } from 'jsdom';
 const html = await readFile(new URL('index.html', import.meta.url), 'utf8');
 const dom = new JSDOM(html, { url: 'http://localhost/', pretendToBeVisual: true });
 
-for (const key of ['window', 'document', 'sessionStorage', 'localStorage',
+shimLayout(dom.window);
+for (const key of ['window', 'Window', 'document', 'sessionStorage', 'localStorage',
   'requestAnimationFrame', 'cancelAnimationFrame', 'matchMedia', 'getComputedStyle',
   'Node', 'Element', 'HTMLElement', 'CustomEvent', 'Event', 'KeyboardEvent',
   'MutationObserver']) {
@@ -132,7 +134,8 @@ const dom2 = new JSDOM(html, { url: 'http://localhost/', pretendToBeVisual: true
 for (const [key, value] of Object.entries(snapshot)) {
   dom2.window.sessionStorage.setItem(key, value);
 }
-for (const key of ['window', 'document', 'sessionStorage', 'localStorage',
+shimLayout(dom2.window);
+for (const key of ['window', 'Window', 'document', 'sessionStorage', 'localStorage',
   'requestAnimationFrame', 'cancelAnimationFrame', 'matchMedia', 'getComputedStyle',
   'Node', 'Element', 'HTMLElement', 'CustomEvent', 'Event', 'KeyboardEvent',
   'MutationObserver']) {

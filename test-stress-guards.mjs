@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { shimLayout } from './test-support.mjs';
 import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
 
@@ -12,7 +13,8 @@ const html = await readFile(new URL('index.html', import.meta.url), 'utf8');
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function installGlobals(dom) {
-  for (const key of ['window', 'document', 'sessionStorage', 'localStorage',
+  shimLayout(dom.window);
+  for (const key of ['window', 'Window', 'document', 'sessionStorage', 'localStorage',
     'requestAnimationFrame', 'cancelAnimationFrame', 'matchMedia', 'getComputedStyle',
     'Node', 'Element', 'HTMLElement', 'CustomEvent', 'Event', 'KeyboardEvent',
     'MutationObserver']) {

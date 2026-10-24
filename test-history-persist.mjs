@@ -1,14 +1,36 @@
 import assert from 'node:assert/strict';
+import { shimLayout } from './test-support.mjs';
 import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
 import { createPayloadHistory } from './payload-history.js';
 import {
+  saveEntry,
+  loadEntry,
+  deleteEntries,
   saveWindowHistory,
   loadWindowHistories,
   deleteWindowHistory,
+  cleanupStaleHistories,
+  enforceStorageBudget,
+  touchTabHeartbeat,
   __useTestBackend,
   __clearMemoryBackend,
+  __memoryBackend,
 } from './history-store.js';
+
+// A window record lists entry ids; this reads the payload texts back.
+async function entryTexts(record) {
+  return Promise.all(record.entries.map((entry) => (entry.chars ? loadEntry(entry.id) : '')));
+}
+
+// A backend that throws on every call (storage denied / broken).
+const failingBackend = () => {
+  const deny = async () => { throw new Error('denied'); };
+  return {
+    putMeta: deny, getMetas: deny, deleteMeta: deny,
+    putEntry: deny, getEntry: deny, deleteEntry: deny, listEntries: deny,
+  };
+};
 
 // Persistent per-window paste history: every dataset pasted into every
 // window must survive a refresh and stay navigable with Back/Forward.
@@ -20,14 +42,24 @@ import {
   history.push('{"b":2}');
   history.back();
   const snapshot = history.toJSON();
-  assert.deepEqual(snapshot, { entries: ['{"a":1}', '{"b":2}'], index: 0 });
+  assert.deepEqual(snapshot.entries.map((entry) => entry.chars), [7, 7], 'snapshot lists entry sizes');
+  assert.ok(snapshot.entries.every((entry) => typeof entry.id === 'string' && entry.id), 'snapshot lists entry ids');
+  assert.ok(!('text' in snapshot.entries[0]), 'snapshot never carries payload text');
+  assert.equal(snapshot.index, 0);
 
   const revived = createPayloadHistory();
   assert.equal(revived.restore(snapshot), true, 'restore accepts a snapshot');
   assert.equal(revived.size(), 2);
-  assert.equal(revived.forward(), '{"b":2}', 'restored position navigates forward');
-  assert.equal(revived.back(), '{"a":1}');
+  assert.equal(revived.current(), null, 'restored entries start released (text loads on demand)');
+  const next = revived.forward();
+  assert.equal(next.id, snapshot.entries[1].id, 'restored position navigates forward');
+  assert.equal(revived.back().id, snapshot.entries[0].id);
   assert.equal(revived.back(), null, 'no phantom entries past the start');
+
+  const legacy = createPayloadHistory();
+  legacy.restore({ entries: ['{"a":1}', '{"b":2}'], index: 0 });
+  assert.equal(legacy.current(), '{"a":1}', 'legacy text snapshots restore as resident text');
+  assert.equal(legacy.forward().text, '{"b":2}');
 
   const bad = createPayloadHistory();
   assert.equal(bad.restore(null), false, 'restore rejects null');
@@ -41,13 +73,14 @@ import {
 
 // --- Model: toPersistable drops oversize entries and remaps the index ----
 {
-  const small = (text) => text.length <= 4;
+  const small = (entry) => entry.chars <= 4;
+  const texts = (snapshot) => ({ entries: snapshot.entries.map((entry) => entry.text), index: snapshot.index });
   const history = createPayloadHistory();
   history.push('aa');
   history.push('bbbbbbbb');
   history.push('cc');
   // Index sits on 'cc' (position 2).
-  assert.deepEqual(history.toPersistable(small), {
+  assert.deepEqual(texts(history.toPersistable(small)), {
     entries: ['aa', 'cc'],
     index: 1,
   }, 'oversize middle entry dropped, index remapped');
@@ -58,7 +91,7 @@ import {
   history2.push('aa');
   history2.push('bbbbbbbb');
   history2.back();
-  assert.deepEqual(history2.toPersistable(small), {
+  assert.deepEqual(texts(history2.toPersistable(small)), {
     entries: ['aa'],
     index: 0,
   }, 'index on a surviving entry keeps its remapped position');
@@ -67,14 +100,14 @@ import {
   history3.push('bbbbbbbb');
   history3.push('cc');
   history3.back(); // index on the oversize entry
-  assert.deepEqual(history3.toPersistable(small), {
+  assert.deepEqual(texts(history3.toPersistable(small)), {
     entries: ['cc'],
     index: 0,
   }, 'index on a dropped entry lands on the nearest earlier survivor');
 
   const history4 = createPayloadHistory();
   history4.push('bbbbbbbb');
-  assert.deepEqual(history4.toPersistable(small), {
+  assert.deepEqual(texts(history4.toPersistable(small)), {
     entries: [],
     index: -1,
   }, 'all entries dropped yields an empty snapshot');
@@ -98,41 +131,113 @@ import {
 __clearMemoryBackend();
 {
   assert.deepEqual(await loadWindowHistories('tab-a'), [], 'no history initially');
-  assert.equal(await saveWindowHistory('tab-a', 'window-1', { entries: ['a', 'b'], index: 1 }), true);
-  assert.equal(
-    await saveWindowHistory('tab-a', 'window-2', { entries: ['<x/>'], index: 0 }),
-    true,
-  );
-  await saveWindowHistory('tab-b', 'window-1', { entries: ['other-tab'], index: 0 });
+  assert.equal(await saveEntry('tab-a', 'window-1', 'e-a', 'a'), true);
+  assert.equal(await saveEntry('tab-a', 'window-1', 'e-b', 'b'), true);
+  assert.equal(await saveWindowHistory('tab-a', 'window-1', {
+    entries: [{ id: 'e-a', chars: 1 }, { id: 'e-b', chars: 1 }], index: 1,
+  }), true);
+  await saveEntry('tab-a', 'window-2', 'e-x', '<x/>');
+  assert.equal(await saveWindowHistory('tab-a', 'window-2', { entries: [{ id: 'e-x', chars: 4 }], index: 0 }), true);
+  await saveEntry('tab-b', 'window-1', 'e-other', 'other-tab');
+  await saveWindowHistory('tab-b', 'window-1', { entries: [{ id: 'e-other', chars: 9 }], index: 0 });
 
   const records = await loadWindowHistories('tab-a');
   assert.equal(records.length, 2, 'both windows load');
-  assert.ok(!records.some((record) => record.entries[0] === 'other-tab'), 'tabs are isolated');
+  assert.ok(records.every((record) => record.entries.every((entry) => !('text' in entry))),
+    'loading a window reads only its entry list, never payload text');
+  assert.ok(!records.some((record) => record.entries.some((entry) => entry.id === 'e-other')), 'tabs are isolated');
+  assert.equal(await loadEntry('e-b'), 'b', 'an entry loads on demand');
 
   await deleteWindowHistory('tab-a', 'window-1');
   const after = await loadWindowHistories('tab-a');
   assert.equal(after.length, 1, 'deleted window history is gone');
   assert.equal(after[0].windowId, 'window-2');
+  assert.equal(await loadEntry('e-a'), null, "a closed window's payloads are deleted too");
+  assert.equal(await loadEntry('e-x'), '<x/>', "other windows' payloads are untouched");
+
+  await deleteEntries(['e-x']);
+  assert.equal(await loadEntry('e-x'), null, 'deleteEntries removes payloads');
+}
+__clearMemoryBackend();
+
+// --- Store: large payloads are compressed, written once ------------------
+{
+  const big = JSON.stringify({ rows: Array.from({ length: 20000 }, (_, i) => ({ id: i, name: `user${i}` })) });
+  assert.equal(await saveEntry('gz-tab', 'w1', 'gz-1', big), true);
+  const [summary] = await __memoryBackend().listEntries();
+  assert.ok(summary.size < big.length / 4, `large payload stored compressed (${summary.size} of ${big.length} chars)`);
+  assert.equal(await loadEntry('gz-1'), big, 'compressed payload round-trips byte-for-byte');
+  const unicode = `{"text":"${'日本語 ✓ '.repeat(5000)}"}`;
+  await saveEntry('gz-tab', 'w1', 'gz-2', unicode);
+  assert.equal(await loadEntry('gz-2'), unicode, 'non-ASCII payload round-trips through gzip');
+}
+__clearMemoryBackend();
+
+// --- Store: the size budget evicts the oldest payloads, never protected ones
+{
+  const blob = (seed) => Array.from({ length: 3000 }, (_, i) => `${seed}-${(i * 7919) % 104729}`).join(',');
+  for (let i = 0; i < 6; i += 1) {
+    await saveEntry('budget-tab', 'w1', `b-${i}`, blob(i));
+    await new Promise((resolve) => setTimeout(resolve, 5)); // distinct createdAt
+  }
+  const sizes = await __memoryBackend().listEntries();
+  const total = sizes.reduce((sum, entry) => sum + entry.size, 0);
+  const evicted = await enforceStorageBudget({ maxBytes: Math.floor(total / 2), protect: ['b-0'] });
+  assert.ok(evicted >= 3, `over budget: evicted ${evicted} oldest payloads`);
+  assert.notEqual(await loadEntry('b-0'), null, 'a protected (on-screen) payload is never evicted');
+  assert.equal(await loadEntry('b-1'), null, 'the oldest unprotected payload goes first');
+  assert.notEqual(await loadEntry('b-5'), null, 'the newest payload survives');
+  assert.equal(await enforceStorageBudget({ maxBytes: total * 10 }), 0, 'under budget: nothing evicted');
+}
+__clearMemoryBackend();
+
+// --- Store: closed tabs' leftovers are swept, open tabs are kept ----------
+{
+  const day = 24 * 3600 * 1000;
+  const store = __memoryBackend();
+  const old = Date.now() - 2 * day;
+  await store.putMeta({ key: 'closed-tab:w1', tabId: 'closed-tab', windowId: 'w1', entries: [{ id: 'c-1', chars: 3 }], index: 0, updatedAt: old });
+  await store.putEntry({ id: 'c-1', tabId: 'closed-tab', owner: 'closed-tab:w1', data: 'abc', encoding: 'text', size: 3, createdAt: old });
+  // Same age, but its heartbeat says it is still open (e.g. a background tab).
+  await store.putMeta({ key: 'open-tab:w1', tabId: 'open-tab', windowId: 'w1', entries: [{ id: 'o-1', chars: 3 }], index: 0, updatedAt: old });
+  await store.putEntry({ id: 'o-1', tabId: 'open-tab', owner: 'open-tab:w1', data: 'def', encoding: 'text', size: 3, createdAt: old });
+  // An entry no window lists any more (a lost write), long enough ago.
+  await store.putEntry({ id: 'orphan', tabId: 'open-tab', owner: 'open-tab:w9', data: 'zzz', encoding: 'text', size: 3, createdAt: old });
+  // Legacy v1 record: no tabId field, text inline, long stale.
+  await store.putMeta({ key: 'legacy-tab:window-1', windowId: 'window-1', entries: ['old'], index: 0, updatedAt: old });
+  const { JSDOM: StorageDom } = await import('jsdom');
+  const storageDom = new StorageDom('', { url: 'http://localhost/' });
+  globalThis.localStorage = storageDom.window.localStorage;
+  touchTabHeartbeat('open-tab');
+
+  await cleanupStaleHistories({ tabId: 'current-tab' });
+  const metas = (await store.getMetas()).map((meta) => meta.key);
+  assert.ok(!metas.includes('closed-tab:w1'), "a closed tab's window list is swept");
+  assert.equal(await loadEntry('c-1'), null, "a closed tab's payloads are swept");
+  assert.ok(metas.includes('open-tab:w1'), 'a tab with a fresh heartbeat keeps its history');
+  assert.equal(await loadEntry('o-1'), 'def', "an open tab's payloads are kept");
+  assert.equal(await loadEntry('orphan'), null, 'payloads no window lists are swept');
+  assert.ok(!metas.includes('legacy-tab:window-1'), 'stale legacy records are swept too');
+  delete globalThis.localStorage;
 }
 __clearMemoryBackend();
 
 // --- Store: a failing backend degrades instead of throwing ----------------
 {
-  const failing = {
-    loadAll: async () => { throw new Error('denied'); },
-    save: async () => { throw new Error('denied'); },
-    remove: async () => { throw new Error('denied'); },
-    cleanup: async () => { throw new Error('denied'); },
-  };
-  __useTestBackend(failing);
+  __useTestBackend(failingBackend());
   try {
     assert.equal(
-      await saveWindowHistory('tab-a', 'window-1', { entries: ['a'], index: 0 }),
+      await saveWindowHistory('tab-a', 'window-1', { entries: [{ id: 'x', chars: 1 }], index: 0 }),
       false,
       'failed save reports false',
     );
+    assert.equal(await saveEntry('tab-a', 'window-1', 'x', 'a'), false, 'failed entry save reports false');
+    assert.equal(await loadEntry('x'), null, 'failed entry load yields null');
     assert.deepEqual(await loadWindowHistories('tab-a'), [], 'failed load yields no records');
     await deleteWindowHistory('tab-a', 'window-1'); // must not throw
+    await deleteEntries(['x']); // must not throw
+    await cleanupStaleHistories({ tabId: 'tab-a' }); // must not throw
+    assert.equal(await enforceStorageBudget(), 0, 'failed budget check evicts nothing');
   } finally {
     __useTestBackend(null);
   }
@@ -145,7 +250,8 @@ const html = await readFile(new URL('index.html', import.meta.url), 'utf8');
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function installGlobals(dom) {
-  for (const key of ['window', 'document', 'sessionStorage', 'localStorage',
+  shimLayout(dom.window);
+  for (const key of ['window', 'Window', 'document', 'sessionStorage', 'localStorage',
     'requestAnimationFrame', 'cancelAnimationFrame', 'matchMedia', 'getComputedStyle',
     'Node', 'Element', 'HTMLElement', 'CustomEvent', 'Event', 'KeyboardEvent',
     'MutationObserver']) {
@@ -316,34 +422,23 @@ assert.equal(editorD.value, '{"p":3}', 'forward reaches the newer dataset after 
 // --- Boot: a paste during hydration wins over the stale load --------------
 __clearMemoryBackend();
 {
-  const records = new Map();
   let releaseLoad;
   const gate = new Promise((resolve) => { releaseLoad = resolve; });
   const tabId = 'race-tab';
-  records.set(`${tabId}:window-1`, {
-    key: `${tabId}:window-1`,
-    windowId: 'window-1',
-    entries: ['{"stale":true}'],
-    index: 0,
-    updatedAt: Date.now(),
-  });
+  const memory = __memoryBackend();
+  await saveEntry(tabId, 'window-1', 'stale-1', '{"stale":true}');
+  await saveWindowHistory(tabId, 'window-1', { entries: [{ id: 'stale-1', chars: 14 }], index: 0 });
+  let stalled = false;
   __useTestBackend({
-    async loadAll() {
-      const snap = [...records.values()].map((record) => ({ ...record }));
-      await gate; // hydration stalls here
+    ...memory,
+    async getMetas() {
+      const snap = (await memory.getMetas()).map((record) => ({ ...record }));
+      if (!stalled) {
+        stalled = true;
+        await gate; // hydration stalls here
+      }
       return snap;
     },
-    async save(tid, windowId, shot) {
-      records.set(`${tid}:${windowId}`, {
-        key: `${tid}:${windowId}`,
-        windowId,
-        entries: shot.entries,
-        index: shot.index,
-        updatedAt: Date.now(),
-      });
-    },
-    async remove(tid, windowId) { records.delete(`${tid}:${windowId}`); },
-    async cleanup() {},
   });
   try {
     const domE = new JSDOM(html, { url: 'http://localhost/', pretendToBeVisual: true });
@@ -357,8 +452,8 @@ __clearMemoryBackend();
     await appE.__historyHydrated();
     await appE.__flushHistorySaves();
     assert.equal(editorE.value, '{"fresh":true}', 'fresh paste is not clobbered by the stale load');
-    const final = [...records.values()].find((record) => record.windowId === 'window-1');
-    assert.deepEqual(final.entries, ['{"fresh":true}'], 'the newer in-memory state is re-saved');
+    const [final] = await loadWindowHistories(tabId);
+    assert.deepEqual(await entryTexts(final), ['{"fresh":true}'], 'the newer in-memory state is re-saved');
   } finally {
     __useTestBackend(null);
   }
@@ -388,10 +483,8 @@ __clearMemoryBackend();
     !remaining.some((record) => record.windowId === doomedId),
     'closed window history is deleted from storage',
   );
-  assert.ok(
-    remaining.some((record) => record.entries.includes('{"stays":2}')),
-    'surviving window history is untouched',
-  );
+  const remainingTexts = (await Promise.all(remaining.map(entryTexts))).flat();
+  assert.ok(remainingTexts.includes('{"stays":2}'), 'surviving window history is untouched');
 }
 __clearMemoryBackend();
 
@@ -401,12 +494,7 @@ __clearMemoryBackend();
   installGlobals(domG);
   const appG = await import('./app.js?history-persist=7');
   await appG.__historyHydrated();
-  __useTestBackend({
-    loadAll: async () => { throw new Error('denied'); },
-    save: async () => { throw new Error('denied'); },
-    remove: async () => { throw new Error('denied'); },
-    cleanup: async () => { throw new Error('denied'); },
-  });
+  __useTestBackend(failingBackend());
   try {
     const docG = domG.window.document;
     const editorG = docG.querySelector('#payloadInput');
@@ -473,7 +561,7 @@ __clearMemoryBackend();
   const records = await loadWindowHistories(app.__getTabId());
   const w2 = records.find((record) => record.windowId === w2Id);
   assert.ok(
-    !w2 || !w2.entries.some((entry) => entry.includes('typed')),
+    !w2 || !(await entryTexts(w2)).some((entry) => entry?.includes('typed')),
     "Window 2's history is untouched by Window 1's typing",
   );
 }
@@ -482,34 +570,25 @@ __clearMemoryBackend();
   // A 3MB entry (over the 2MB Blob threshold) round-trips through the real
   // memory backend as an identical string.
   const big = `{"blob":true,"pad":"${'z'.repeat(3 * 1024 * 1024)}"}`;
-  assert.equal(await saveWindowHistory('blob-tab', 'w1', { entries: ['small', big], index: 1 }), true);
-  const loaded = await loadWindowHistories('blob-tab');
-  assert.equal(loaded.length, 1, 'record stored');
-  assert.deepEqual(
-    loaded[0].entries.map((entry) => typeof entry),
-    ['string', 'string'],
-    'entries come back as strings, never Blobs',
-  );
-  assert.equal(loaded[0].entries[1], big, '3MB entry survives the Blob round-trip byte-for-byte');
-  assert.equal(loaded[0].index, 1, 'position survives');
+  assert.equal(await saveEntry('blob-tab', 'w1', 'big-1', big), true);
+  const loaded = await loadEntry('big-1');
+  assert.equal(typeof loaded, 'string', 'entries come back as strings, never Blobs');
+  assert.equal(loaded, big, '3MB entry survives the compressed round-trip byte-for-byte');
   await deleteWindowHistory('blob-tab', 'w1');
 
   // Quota failure: the save reports false, nothing throws, the app is fine.
-  __useTestBackend({
-    async save() {
-      const error = new Error('Quota exceeded');
-      error.name = 'QuotaExceededError';
-      throw error;
-    },
-    async loadAll() { return []; },
-    async remove() {},
-    async cleanup() {},
-  });
+  const quota = async () => {
+    const error = new Error('Quota exceeded');
+    error.name = 'QuotaExceededError';
+    throw error;
+  };
+  __useTestBackend({ ...__memoryBackend(), putMeta: quota, putEntry: quota, getMetas: async () => [] });
   assert.equal(
-    await saveWindowHistory('quota-tab', 'w1', { entries: ['x'], index: 0 }),
+    await saveWindowHistory('quota-tab', 'w1', { entries: [{ id: 'x', chars: 1 }], index: 0 }),
     false,
     'QuotaExceededError degrades to false instead of throwing',
   );
+  assert.equal(await saveEntry('quota-tab', 'w1', 'x', 'x'), false, 'entry quota failure degrades to false');
   assert.deepEqual(await loadWindowHistories('quota-tab'), [], 'failed backend loads nothing');
   __useTestBackend(null);
 }
@@ -529,7 +608,7 @@ __clearMemoryBackend();
   const stored = await loadWindowHistories(appA.__getTabId());
   assert.equal(stored.length, 1, 'window history persisted');
   assert.ok(
-    stored[0].entries.some((entry) => entry.length > 4 * 1024 * 1024),
+    stored[0].entries.some((entry) => entry.chars > 4 * 1024 * 1024),
     'the 5MB entry persisted (above the old 2MB cutoff)',
   );
   const snapshot = snapshotStorage();
@@ -574,6 +653,125 @@ __clearMemoryBackend();
   await ctrlVPaste(dom, editor, `${big}y`);
   await app.__flushHistorySaves();
   assert.equal(persistCalls, 1, 'requested only once per session');
+}
+__clearMemoryBackend();
+
+// --- Memory: only what is on screen stays resident -------------------------
+// The reported workload: many windows, each pasted and cleared repeatedly.
+// Saved history must live in storage, not memory, and still be navigable.
+{
+  const payload = (w, i) => JSON.stringify({ w, i, pad: `${w}-${i}-`.repeat(40_000) });
+  const size = payload(1, 1).length;
+  const dom = new JSDOM(html, { url: 'http://localhost/', pretendToBeVisual: true });
+  installGlobals(dom);
+  const app = await import('./app.js?history-persist=12');
+  await app.__historyHydrated();
+  const doc = dom.window.document;
+  const editor = doc.querySelector('#payloadInput');
+  const tabs = () => [...doc.querySelectorAll('.window-tab')];
+
+  for (let w = 1; w <= 3; w += 1) {
+    if (w > 1) {
+      doc.querySelector('#newWindowBtn').click();
+      await sleep(50);
+    }
+    for (let i = 1; i <= 3; i += 1) {
+      await ctrlVPaste(dom, editor, payload(w, i));
+      doc.querySelector('#clearBtn').click();
+      await sleep(20);
+    }
+  }
+  await app.__flushHistorySaves();
+  // Every window's current entry is the empty clear state: nothing on
+  // screen needs text, so all nine payloads live only in storage.
+  assert.ok(
+    app.__residentHistoryChars() < size,
+    `cleared payloads are freed from memory (${app.__residentHistoryChars()} chars resident)`,
+  );
+
+  // Back loads the released payload from storage.
+  doc.querySelector('#historyBackBtn').click();
+  await sleep(100);
+  assert.equal(editor.value, payload(3, 3), 'Back restores a cleared payload from storage');
+  doc.querySelector('#historyBackBtn').click();
+  await sleep(100);
+  assert.equal(editor.value, payload(3, 2), 'Back keeps walking stored payloads');
+  await app.__flushHistorySaves();
+  assert.ok(
+    app.__residentHistoryChars() <= size + 100,
+    `only the payload on screen stays in memory (${app.__residentHistoryChars()} chars)`,
+  );
+
+  // A window that is neither active nor recent loads from storage.
+  tabs()[0].click();
+  await sleep(100);
+  doc.querySelector('#historyBackBtn').click();
+  await sleep(100);
+  assert.equal(editor.value, payload(1, 3), "an inactive window's history loads on demand");
+  await app.__flushHistorySaves();
+  assert.ok(
+    app.__residentHistoryChars() <= 2 * size + 200,
+    `switching windows keeps at most the recent window resident (${app.__residentHistoryChars()} chars)`,
+  );
+  const snapshot = snapshotStorage();
+
+  // Refresh: only the active window's payload is read back into memory.
+  const domR = new JSDOM(html, { url: 'http://localhost/', pretendToBeVisual: true });
+  for (const [key, value] of Object.entries(snapshot)) domR.window.sessionStorage.setItem(key, value);
+  installGlobals(domR);
+  const appR = await import('./app.js?history-persist=13');
+  await appR.__historyHydrated();
+  const docR = domR.window.document;
+  const editorR = docR.querySelector('#payloadInput');
+  assert.equal(editorR.value, payload(1, 3), 'refresh restores the active window');
+  assert.ok(
+    appR.__residentHistoryChars() <= size + 100,
+    `refresh loads only the visible payload (${appR.__residentHistoryChars()} chars)`,
+  );
+  const tabsR = [...docR.querySelectorAll('.window-tab')];
+  tabsR[1].click();
+  await sleep(100);
+  docR.querySelector('#historyBackBtn').click();
+  await sleep(100);
+  assert.equal(editorR.value, payload(2, 3), "other windows' history is intact after refresh");
+}
+__clearMemoryBackend();
+
+// --- Format saves the formatted payload (it used to wait for the next paste)
+{
+  const dom = new JSDOM(html, { url: 'http://localhost/', pretendToBeVisual: true });
+  installGlobals(dom);
+  const app = await import('./app.js?history-persist=14');
+  await app.__historyHydrated();
+  const source = await readFile(new URL('app.js', import.meta.url), 'utf8');
+  const format = source.match(/async function formatCurrentPayload[\s\S]*?\n}/)?.[0];
+  assert.match(format, /history\.updateCurrent\(getPayloadText\(\)\)\) \{\s*syncHistoryNav\(\);\s*saveHistoryFor\(activeWindow\);/,
+    'formatting saves the rewritten entry right away');
+}
+__clearMemoryBackend();
+
+// --- An entry evicted from storage is skipped, not shown blank -------------
+{
+  const dom = new JSDOM(html, { url: 'http://localhost/', pretendToBeVisual: true });
+  installGlobals(dom);
+  const app = await import('./app.js?history-persist=15');
+  await app.__historyHydrated();
+  const doc = dom.window.document;
+  const editor = doc.querySelector('#payloadInput');
+  for (const text of ['{"keep":1}', '{"evicted":2}', '{"now":3}']) await ctrlVPaste(dom, editor, text);
+  await app.__flushHistorySaves();
+  const [record] = await loadWindowHistories(app.__getTabId());
+  // Simulate the storage budget evicting the middle payload.
+  await deleteEntries([record.entries[1].id]);
+  // Release everything so Back has to go to storage.
+  for (const text of ['{"later":4}']) await ctrlVPaste(dom, editor, text);
+  await app.__flushHistorySaves();
+  doc.querySelector('#historyBackBtn').click();
+  await sleep(50);
+  assert.equal(editor.value, '{"now":3}');
+  doc.querySelector('#historyBackBtn').click();
+  await sleep(100);
+  assert.equal(editor.value, '{"keep":1}', 'Back skips a payload that was evicted from storage');
 }
 __clearMemoryBackend();
 

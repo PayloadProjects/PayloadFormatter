@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { shimLayout } from './test-support.mjs';
 import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
 
@@ -74,7 +75,8 @@ assert.equal(neg.utc, '1969-12-31T00:00:00Z', 'pre-1970 timestamps work');
 const html = await readFile(new URL('index.html', import.meta.url), 'utf8');
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const dom = new JSDOM(html, { url: 'http://localhost/', pretendToBeVisual: true });
-for (const key of ['window', 'document', 'sessionStorage', 'localStorage',
+shimLayout(dom.window);
+for (const key of ['window', 'Window', 'document', 'sessionStorage', 'localStorage',
   'requestAnimationFrame', 'cancelAnimationFrame', 'matchMedia', 'getComputedStyle',
   'Node', 'Element', 'HTMLElement', 'CustomEvent', 'Event', 'KeyboardEvent',
   'MutationObserver']) {

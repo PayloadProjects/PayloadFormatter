@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
+import { shimLayout } from './test-support.mjs';
 import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
 import { createPayloadHistory } from './payload-history.js';
 import {
+  saveEntry,
+  loadEntry,
   saveWindowHistory,
   loadWindowHistories,
   __useTestBackend,
@@ -18,7 +21,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const MB = 1024 * 1024;
 
 function installGlobals(dom) {
-  for (const key of ['window', 'document', 'DOMParser', 'sessionStorage', 'localStorage',
+  shimLayout(dom.window);
+  for (const key of ['window', 'Window', 'document', 'DOMParser', 'sessionStorage', 'localStorage',
     'requestAnimationFrame', 'cancelAnimationFrame', 'matchMedia', 'getComputedStyle',
     'Node', 'Element', 'HTMLElement', 'CustomEvent', 'Event', 'KeyboardEvent',
     'MutationObserver']) {
@@ -144,8 +148,7 @@ function treeControllerFor(dom, payload, mode) {
   document.body.appendChild(container);
   const view = createTreeView(container, { onCopyPath() {} });
 
-  // ~4MB, ~270k fixed-width items; the only match sits at index 200000
-  // (inside the 400k search-visit budget).
+  // ~4MB, ~270k fixed-width items; the only match sits at index 200000.
   const n = 270000;
   const items = new Array(n);
   for (let i = 0; i < n; i += 1) items[i] = `item-${String(i).padStart(6, '0')}`;
@@ -215,19 +218,20 @@ function treeControllerFor(dom, payload, mode) {
   assert.equal(history.size(), 100, 'count cap holds at 100');
   let last = null;
   for (let i = 0; i < 99; i += 1) last = history.back();
-  assert.equal(last, 'entry-1', 'oldest survivor is push #2 (push #1 evicted)');
+  assert.equal(last.text, 'entry-1', 'oldest survivor is push #2 (push #1 evicted)');
   assert.equal(history.back(), null, 'nothing before the oldest survivor');
 }
 
-// --- C2. 32MB byte cap evicts 9MB entries oldest-first ----------------------
+// --- C2. 32MB memory cap evicts unsaved 9MB entries oldest-first ------------
+// (Entries that were saved to storage and released no longer count: see C4.)
 {
   const history = createPayloadHistory();
   const big = 'e'.repeat(9 * MB);
   for (let i = 0; i < 5; i += 1) history.push(big + i); // 45MB total
   assert.equal(history.size(), 3, 'byte cap keeps ~3 entries of 9MB');
   assert.ok(history.current().endsWith('4'), 'newest entry kept');
-  assert.ok(history.back().endsWith('3'), 'one step back');
-  assert.ok(history.back().endsWith('2'), 'two steps back');
+  assert.ok(history.back().text.endsWith('3'), 'one step back');
+  assert.ok(history.back().text.endsWith('2'), 'two steps back');
   assert.equal(history.back(), null, 'evicted entries are unreachable');
 }
 
@@ -238,6 +242,20 @@ function treeControllerFor(dom, payload, mode) {
   for (let i = 0; i < 5; i += 1) history.push(cjk + i);
   assert.ok(history.size() >= 1 && history.size() <= 4, `CJK eviction sane (size ${history.size()})`);
   assert.ok(history.current().endsWith('4'), 'newest CJK entry kept');
+}
+
+// --- C4. Saved + released entries cost no memory and are never evicted -----
+{
+  const history = createPayloadHistory();
+  const big = 'e'.repeat(9 * MB);
+  for (let i = 0; i < 5; i += 1) {
+    history.push(big + i);
+    for (const entry of history.entries()) if (entry.text) entry.state = 'saved';
+    history.release();
+  }
+  assert.equal(history.size(), 5, 'all 45MB of saved history is kept');
+  assert.equal(history.residentChars(), 9 * MB + 1, 'only the current entry stays in memory');
+  assert.equal(history.back().text, null, 'a released entry needs loading before display');
 }
 
 // --- D1. 19.9MB persists, 20.1MB is dropped by the persist cap --------------
@@ -256,15 +274,15 @@ function treeControllerFor(dom, payload, mode) {
   const recs = await loadWindowHistories(app.__getTabId());
   assert.equal(recs.length, 1, 'history record saved');
   assert.equal(recs[0].entries.length, 1, '19.9MB entry kept by the 20MB persist cap');
-  assert.equal(recs[0].entries[0].length, keep.length, '19.9MB entry round-trips intact');
+  assert.equal((await loadEntry(recs[0].entries[0].id)).length, keep.length, '19.9MB entry round-trips intact');
 
   const drop = `{${'x'.repeat(Math.floor(20.1 * MB))}}`;
   fireLargePaste(drop);
   await sleep(200);
   await app.__flushHistorySaves();
   const recs2 = await loadWindowHistories(app.__getTabId());
-  assert.equal(recs2[0].entries.length, 0, '20.1MB entry dropped by the persist cap');
-  assert.equal(typeof recs2[0].entries, 'object', 'record survives with empty entries');
+  assert.equal(recs2[0].entries.length, 1, '20.1MB entry dropped by the persist cap');
+  assert.equal(recs2[0].entries[0].chars, keep.length, 'the earlier 19.9MB entry stays persisted');
 }
 
 // --- D2. CJK byte-half of the persist predicate -----------------------------
@@ -281,8 +299,9 @@ function treeControllerFor(dom, payload, mode) {
   await sleep(600);
   await app.__flushHistorySaves();
   const recs = await loadWindowHistories(app.__getTabId());
+  const texts = await Promise.all(recs.flatMap((record) => record.entries.map((entry) => loadEntry(entry.id))));
   assert.ok(
-    recs.every((record) => !record.entries.some((entry) => entry.includes('日'))),
+    texts.every((text) => !text?.includes('日')),
     '7M CJK chars (21MB UTF-8) dropped by the byte-half of the persist cap',
   );
 }
@@ -294,6 +313,9 @@ function treeControllerFor(dom, payload, mode) {
   assert.equal(history.restore({ entries: null }), false, 'null entries rejected');
   assert.equal(history.restore({ entries: 'nope' }), false, 'non-array entries rejected');
   assert.equal(history.restore({ entries: [null, 123, {}], index: 99 }), true, 'tolerates junk entries');
+  assert.equal(history.restore({ entries: [{ id: 'x', chars: -4 }, { id: 7 }], index: 0 }), true, 'tolerates junk descriptors');
+  assert.equal(history.size(), 2);
+  assert.equal(history.restore({ entries: [null, 123, {}], index: 99 }), true);
   assert.equal(history.size(), 3, 'junk coerced to strings');
   assert.equal(history.current(), '[object Object]', 'index clamped to last entry');
 }
@@ -346,14 +368,19 @@ function treeControllerFor(dom, payload, mode) {
   __clearMemoryBackend();
   const five = 'q'.repeat(5 * MB);
   for (let i = 0; i < 20; i += 1) {
-    await saveWindowHistory('hydra-tab', `w${i}`, { entries: ['a', five], index: 1 });
+    await saveEntry('hydra-tab', `w${i}`, `h${i}-a`, 'a');
+    await saveEntry('hydra-tab', `w${i}`, `h${i}-five`, five);
+    await saveWindowHistory('hydra-tab', `w${i}`, {
+      entries: [{ id: `h${i}-a`, chars: 1 }, { id: `h${i}-five`, chars: five.length }], index: 1,
+    });
   }
   const t0 = Date.now();
   const recs = await loadWindowHistories('hydra-tab');
   const elapsed = Date.now() - t0;
   assert.equal(recs.length, 20, 'all 20 large histories load');
-  assert.ok(recs.every((r) => r.entries[1] === five), '5MB Blob entries round-trip on all windows');
-  assert.ok(elapsed < 20000, `20-window large hydration in ${elapsed}ms`);
+  assert.ok(elapsed < 500, `20-window hydration reads only entry lists (${elapsed}ms)`);
+  const texts = await Promise.all(recs.map((r) => loadEntry(r.entries[1].id)));
+  assert.ok(texts.every((text) => text === five), '5MB entries round-trip on all windows when loaded');
   __clearMemoryBackend();
 }
 
