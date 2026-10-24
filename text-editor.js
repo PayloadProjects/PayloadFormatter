@@ -64,6 +64,10 @@ const editorTheme = EditorView.theme({
   '.cm-scroller': { fontFamily: 'inherit', lineHeight: 'inherit' },
   '.cm-content': { padding: '12px 0', caretColor: 'var(--editor-caret)' },
   '.cm-line': { padding: '0 12px' },
+  '.cm-lineWrapping .cm-line': {
+    paddingLeft: 'calc(12px + var(--hang, 0ch))',
+    textIndent: 'calc(-1 * var(--hang, 0ch))',
+  },
   '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--editor-caret)' },
   '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection':
     { backgroundColor: 'var(--code-selection-bg)' },
@@ -118,6 +122,61 @@ const searchMatchHighlighter = ViewPlugin.fromClass(class {
   }
 }, { decorations: (plugin) => plugin.decorations });
 
+// Wrap mode: continuation rows of a wrapped line line up under the line's
+// own indentation (plus two columns, so they read as a continuation)
+// instead of restarting at the left edge. Each visible line carries its
+// indentation width as --hang; the theme turns that into a padding-left /
+// negative text-indent pair, which leaves the first row where it was.
+const HANG_EXTRA_COLUMNS = 2;
+// Very deep indentation would squeeze continuation rows into a sliver.
+const MAX_HANG_COLUMNS = 40;
+const hangDecorations = new Map();
+
+function hangDecoration(columns) {
+  let decoration = hangDecorations.get(columns);
+  if (!decoration) {
+    decoration = Decoration.line({ attributes: { style: `--hang: ${columns}ch` } });
+    hangDecorations.set(columns, decoration);
+  }
+  return decoration;
+}
+
+function indentColumns(text, tabSize) {
+  let columns = 0;
+  for (const char of text) {
+    if (char === ' ') columns += 1;
+    else if (char === '\t') columns += tabSize - (columns % tabSize);
+    else break;
+  }
+  return columns;
+}
+
+const hangingIndent = ViewPlugin.fromClass(class {
+  constructor(view) {
+    this.decorations = this.build(view);
+  }
+
+  update(update) {
+    if (update.docChanged || update.viewportChanged) this.decorations = this.build(update.view);
+  }
+
+  build(view) {
+    const builder = new RangeSetBuilder();
+    const { doc, tabSize } = view.state;
+    for (const { from, to } of view.visibleRanges) {
+      for (let pos = from; pos <= to;) {
+        const line = doc.lineAt(pos);
+        const indent = indentColumns(line.text.slice(0, MAX_HANG_COLUMNS * tabSize), tabSize);
+        builder.add(line.from, line.from, hangDecoration(Math.min(indent, MAX_HANG_COLUMNS) + HANG_EXTRA_COLUMNS));
+        pos = line.to + 1;
+      }
+    }
+    return builder.finish();
+  }
+}, { decorations: (plugin) => plugin.decorations });
+
+const wrapExtension = [EditorView.lineWrapping, hangingIndent];
+
 function languageFor(mode) {
   if (mode === 'json') return json();
   if (mode === 'xml') return xml();
@@ -168,7 +227,9 @@ export function createSyntaxEditor(host) {
       ])),
       keymap.of([...historyKeymap, ...defaultKeymap]),
       language.of(languageFor(mode)),
-      wrapping.of(wrapOn ? EditorView.lineWrapping : []),
+      wrapping.of(wrapOn ? wrapExtension : []),
+      // Tabs render 2 columns wide (text-editor.css); measure them the same.
+      EditorState.tabSize.of(2),
       readOnly.of(EditorState.readOnly.of(readOnlyOn)),
       editorTheme,
       EditorView.contentAttributes.of({
@@ -259,7 +320,7 @@ export function createSyntaxEditor(host) {
         const on = next === 'soft' || next === 'hard';
         if (on === wrapOn) return;
         wrapOn = on;
-        reconfigure(wrapping, wrapOn ? EditorView.lineWrapping : []);
+        reconfigure(wrapping, wrapOn ? wrapExtension : []);
       },
     },
     scrollTop: {

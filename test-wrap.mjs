@@ -43,9 +43,11 @@ assert.match(app, /applyWrap\([\s\S]*?\) \{[\s\S]*?syntaxEditor\.refresh\(\)/,
 
 // CodeMirror wraps natively (colors and line numbers included, at any
 // size): the editor's `wrap` property swaps the lineWrapping extension.
-assert.match(editorJs, /wrapping\.of\(wrapOn \? EditorView\.lineWrapping : \[\]\)/,
+assert.match(editorJs, /const wrapExtension = \[EditorView\.lineWrapping, hangingIndent\];/,
+  'wrap mode is line wrapping plus a hanging indent');
+assert.match(editorJs, /wrapping\.of\(wrapOn \? wrapExtension : \[\]\)/,
   'the editor starts with the current wrap state');
-assert.match(editorJs, /reconfigure\(wrapping, wrapOn \? EditorView\.lineWrapping : \[\]\)/,
+assert.match(editorJs, /reconfigure\(wrapping, wrapOn \? wrapExtension : \[\]\)/,
   'toggling wrap reconfigures line wrapping in place');
 assert.ok(editorJs.includes("root.dataset.wrap === 'on'"), 'the editor reads the saved wrap state at startup');
 assert.doesNotMatch(editorJs, /MAX_WRAP|wrap-size/, 'wrap mode has no size budget any more');

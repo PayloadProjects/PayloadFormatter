@@ -106,8 +106,19 @@ host.addEventListener('input', () => { inputs += 1; });
   assert.equal(host.wrap, 'soft');
   host.value = 'still wraps after a new payload';
   assert.ok(content().classList.contains('cm-lineWrapping'), 'wrap survives a value replacement');
+  // Hanging indent: each line carries its indentation (+2 columns) so the
+  // theme can line wrapped rows up under it instead of the left edge.
+  host.value = '{\n    "note": "long",\n\t\t"tabbed": 1,\nflat\n' + ' '.repeat(90) + 'deep\n}';
+  await sleep(20);
+  const hangOf = (text) => [...host.querySelectorAll('.cm-line')]
+    .find((line) => line.textContent.trim().startsWith(text))?.style.getPropertyValue('--hang');
+  assert.equal(hangOf('"note"'), '6ch', 'a 4-space line hangs at 6 columns');
+  assert.equal(hangOf('"tabbed"'), '6ch', 'tabs count as tab-size (2) columns');
+  assert.equal(hangOf('flat'), '2ch', 'an unindented line still hangs 2 columns');
+  assert.equal(hangOf('deep'), '42ch', 'very deep indentation is capped at 40 (+2) columns');
   host.wrap = 'off';
   assert.ok(!content().classList.contains('cm-lineWrapping'), 'wrap off disables it');
+  assert.equal(hangOf('"note"'), '', 'no hanging indent while wrap is off');
 
   editor.refresh('json');
   host.value = '{"name":"A","n":-1.5,"ok":true,"nil":null}';
