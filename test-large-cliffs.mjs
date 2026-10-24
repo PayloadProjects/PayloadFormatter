@@ -148,8 +148,7 @@ function treeControllerFor(dom, payload, mode) {
   document.body.appendChild(container);
   const view = createTreeView(container, { onCopyPath() {} });
 
-  // ~4MB, ~270k fixed-width items; the only match sits at index 200000
-  // (inside the 400k search-visit budget).
+  // ~4MB, ~270k fixed-width items; the only match sits at index 200000.
   const n = 270000;
   const items = new Array(n);
   for (let i = 0; i < n; i += 1) items[i] = `item-${String(i).padStart(6, '0')}`;
