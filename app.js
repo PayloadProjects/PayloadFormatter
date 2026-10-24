@@ -1,6 +1,7 @@
 import { detectPayloadMode } from './payload-detection.js';
 import { createTreeController } from './tree-controller.js';
 import { createSyntaxEditor } from './text-editor.js';
+import { createTextSearch } from './text-search.js';
 import { createWindowManager, MAX_WINDOWS } from './window-manager.js';
 import { initEpochPopover } from './epoch-popover.js';
 import {
@@ -105,6 +106,15 @@ const treeController = createTreeController({
   // later window switch (or return to tree view) restores it.
   onTreeHide: () => { if (activeWindow) stashTreeUi(activeWindow); },
   getTreeRestore: () => activeWindow?.ui.tree,
+});
+
+// The strip's text search box. It follows edits and payload swaps on its
+// own (the editor reports every document change).
+createTextSearch({
+  editor: syntaxEditor,
+  editorHost: editor,
+  isTextView: () => !treeController.isTree(),
+  isPreview: () => inLargeMode(),
 });
 
 initializeTheme();

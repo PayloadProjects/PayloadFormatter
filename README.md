@@ -8,7 +8,7 @@ A focused browser-only formatter for JSON and XML.
 - Dark and light themes with a saved browser preference
 - Format JSON and XML in one large editor
 - Word-wrap toggle for long lines
-- Fast editor for multi-megabyte payloads (CodeMirror 6): line numbers, syntax colors, undo, and search & replace (Ctrl/Cmd+F)
+- Fast editor for multi-megabyte payloads (CodeMirror 6): line numbers, syntax colors, undo, and a search box with match count (Ctrl/Cmd+F)
 - Copy, Paste, and Delete actions
 - Payload history: roll back/forward through previously pasted payloads
 - Payload windows: named tabs for juggling multiple payloads (double-click to rename)

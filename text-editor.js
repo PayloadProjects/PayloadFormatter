@@ -2,7 +2,10 @@ import {
   EditorState,
   Compartment,
   Prec,
+  RangeSetBuilder,
   EditorView,
+  ViewPlugin,
+  Decoration,
   keymap,
   lineNumbers,
   highlightActiveLine,
@@ -18,15 +21,20 @@ import {
   json,
   xml,
   search,
-  searchKeymap,
   highlightSelectionMatches,
+  SearchQuery,
+  setSearchQuery,
+  getSearchQuery,
+  findNext,
+  findPrevious,
   tags,
 } from './vendor/codemirror/codemirror.js';
 
 // The text view is a CodeMirror 6 editor. Unlike a native textarea, which
 // lays out every line of the payload on every change (seconds per keystroke
 // at 8MB), CodeMirror only renders the lines in view, so multi-megabyte
-// payloads stay editable, highlighted and searchable (Ctrl/Cmd+F).
+// payloads stay editable, highlighted and searchable. Search is driven by
+// the text-view search box in the editor strip (text-search.js).
 //
 // The host element (#payloadInput) keeps the textarea-shaped contract the
 // rest of the app relies on: value, selectionStart/End, setSelectionRange,
@@ -71,9 +79,44 @@ const editorTheme = EditorView.theme({
   '.cm-searchMatch': { backgroundColor: 'var(--tree-match-bg)', outline: '1px solid var(--tree-hit-border)' },
   '.cm-searchMatch.cm-searchMatch-selected': { backgroundColor: 'var(--tree-hit-bg)' },
   '&.cm-focused .cm-matchingBracket': { backgroundColor: 'var(--tree-match-bg)', outline: '1px solid var(--guide)' },
-  '.cm-panels': { backgroundColor: 'var(--strip-bg)', color: 'var(--editor-text)' },
-  '.cm-panels.cm-panels-top': { borderBottom: '1px solid var(--panel-border)' },
 });
+
+// Counting stops here: past this many matches the label shows "N+".
+const MAX_COUNTED_MATCHES = 10_000;
+
+const matchMark = Decoration.mark({ class: 'cm-searchMatch' });
+const selectedMatchMark = Decoration.mark({ class: 'cm-searchMatch cm-searchMatch-selected' });
+
+// Marks the current query's matches in the visible lines only (cheap at any
+// document size). CodeMirror's built-in highlighter only runs while its own
+// search panel is open; the app uses the strip search box instead.
+const searchMatchHighlighter = ViewPlugin.fromClass(class {
+  constructor(view) {
+    this.decorations = this.build(view);
+  }
+
+  update(update) {
+    if (update.docChanged || update.viewportChanged || update.selectionSet
+        || getSearchQuery(update.state) !== getSearchQuery(update.startState)) {
+      this.decorations = this.build(update.view);
+    }
+  }
+
+  build(view) {
+    const query = getSearchQuery(view.state);
+    if (!query.search || !query.valid) return Decoration.none;
+    const builder = new RangeSetBuilder();
+    const { main } = view.state.selection;
+    for (const { from, to } of view.visibleRanges) {
+      const cursor = query.getCursor(view.state, from, to);
+      for (let match = cursor.next(); !match.done; match = cursor.next()) {
+        const { from: start, to: end } = match.value;
+        builder.add(start, end, start === main.from && end === main.to ? selectedMatchMark : matchMark);
+      }
+    }
+    return builder.finish();
+  }
+}, { decorations: (plugin) => plugin.decorations });
 
 function languageFor(mode) {
   if (mode === 'json') return json();
@@ -94,6 +137,12 @@ export function createSyntaxEditor(host) {
   // reads `value` several times per edit: cache it per (immutable) doc.
   let cachedDoc = null;
   let cachedText = '';
+  // The strip search box's query; re-applied whenever the document is
+  // replaced (a new payload gets a fresh editor state).
+  let searchText = '';
+  const changeListeners = new Set();
+  const findListeners = new Set();
+  const notifyChange = () => { for (const listener of changeListeners) listener(); };
 
   function extensions() {
     return [
@@ -105,12 +154,19 @@ export function createSyntaxEditor(host) {
       highlightActiveLine(),
       bracketMatching(),
       highlightSelectionMatches(),
-      search({ top: true }),
+      search(),
+      searchMatchHighlighter,
       syntaxHighlighting(highlightStyle),
-      // Ctrl/Cmd+Enter formats (the app listens for it on the host); stop
-      // the default keymap from also inserting a blank line.
-      Prec.highest(keymap.of([{ key: 'Mod-Enter', run: () => true }])),
-      keymap.of([...searchKeymap, ...historyKeymap, ...defaultKeymap]),
+      Prec.highest(keymap.of([
+        // Ctrl/Cmd+Enter formats (the app listens for it on the host); stop
+        // the default keymap from also inserting a blank line.
+        { key: 'Mod-Enter', run: () => true },
+        // Find goes to the strip search box; F3 / Mod-g step through hits.
+        { key: 'Mod-f', run: () => { for (const listener of findListeners) listener(); return true; } },
+        { key: 'F3', run: findNext, shift: findPrevious },
+        { key: 'Mod-g', run: findNext, shift: findPrevious },
+      ])),
+      keymap.of([...historyKeymap, ...defaultKeymap]),
       language.of(languageFor(mode)),
       wrapping.of(wrapOn ? EditorView.lineWrapping : []),
       readOnly.of(EditorState.readOnly.of(readOnlyOn)),
@@ -126,6 +182,7 @@ export function createSyntaxEditor(host) {
         if (!update.docChanged) return;
         syncEmpty();
         host.dispatchEvent(new Event('input', { bubbles: true }));
+        notifyChange();
       }),
     ];
   }
@@ -158,6 +215,11 @@ export function createSyntaxEditor(host) {
     view.dispatch({ effects: compartment.reconfigure(extension) });
   }
 
+  function applySearchQuery() {
+    const query = new SearchQuery({ search: searchText, caseSensitive: false, literal: true });
+    view.dispatch({ effects: setSearchQuery.of(query) });
+  }
+
   Object.defineProperties(host, {
     value: {
       configurable: true,
@@ -168,6 +230,8 @@ export function createSyntaxEditor(host) {
         cachedDoc = view.state.doc;
         cachedText = doc.includes('\r') ? cachedDoc.toString() : doc;
         syncEmpty();
+        if (searchText) applySearchQuery();
+        notifyChange();
       },
     },
     selectionStart: {
@@ -234,6 +298,43 @@ export function createSyntaxEditor(host) {
       if (nextMode === mode) return;
       mode = nextMode;
       reconfigure(language, languageFor(mode));
+    },
+    search: {
+      // Case-insensitive literal search, highlighted in the visible lines.
+      setQuery(text) {
+        searchText = String(text ?? '');
+        applySearchQuery();
+      },
+      // Select and scroll to the next/previous match (wrapping around).
+      // Returns false when there is no match.
+      next: () => !!searchText && findNext(view),
+      previous: () => !!searchText && findPrevious(view),
+      // { total, index, truncated }: index is the selected match, or -1.
+      stats() {
+        const query = getSearchQuery(view.state);
+        if (!searchText || !query.valid) return { total: 0, index: -1, truncated: false };
+        const { main } = view.state.selection;
+        const cursor = query.getCursor(view.state);
+        let total = 0;
+        let index = -1;
+        for (let match = cursor.next(); !match.done; match = cursor.next()) {
+          if (match.value.from === main.from && match.value.to === main.to) index = total;
+          total += 1;
+          if (total >= MAX_COUNTED_MATCHES) return { total, index, truncated: true };
+        }
+        return { total, index, truncated: false };
+      },
+      // Short single-line selection, to seed the search box on Ctrl/Cmd+F.
+      selectedText() {
+        const { main } = view.state.selection;
+        if (main.empty || main.to - main.from > 200) return '';
+        const text = view.state.sliceDoc(main.from, main.to);
+        return text.includes('\n') ? '' : text;
+      },
+      // Called after every document change (user edit or new payload).
+      onChange(listener) { changeListeners.add(listener); },
+      // Called when Ctrl/Cmd+F is pressed inside the editor.
+      onFind(listener) { findListeners.add(listener); },
     },
   };
 }

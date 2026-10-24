@@ -34,49 +34,32 @@
 .syntax-attribute { color: var(--syntax-attribute); }
 .syntax-muted, .syntax-comment { color: var(--syntax-muted); }
 
-/* Search panel (Ctrl/Cmd+F): compact, in the app's own control styles. */
-.text-editor .cm-panel.cm-search {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  font-family: ui-sans-serif, system-ui, sans-serif;
-  font-size: 12px;
-}
-.text-editor .cm-panel.cm-search br { display: none; }
-.text-editor .cm-panel.cm-search input.cm-textfield {
-  min-height: 24px;
-  padding: 2px 8px;
+/* Text-view search box in the editor strip (text-search.js); sized like
+   the tree search beside it, which only shows in tree view. */
+.text-strip-search { min-width: 0; flex: 1 1 200px; display: flex; align-items: center; gap: 6px; }
+.text-search {
+  min-width: 140px;
+  flex: 1 1 180px;
+  max-width: 420px;
+  height: 24px;
+  padding: 0 8px;
   border: 1px solid var(--button-border);
-  border-radius: 6px;
+  border-radius: 7px;
   background: var(--editor-bg);
   color: var(--editor-text);
   font: inherit;
+  font-size: 12px;
 }
-.text-editor .cm-panel.cm-search input.cm-textfield:focus { outline: 2px solid var(--editor-focus); outline-offset: 0; }
-.text-editor .cm-panel.cm-search button.cm-button {
-  min-height: 24px;
-  margin: 0;
-  padding: 2px 10px;
-  border: 1px solid var(--button-border);
-  border-radius: 8px;
-  background: var(--button-bg);
-  background-image: none;
-  color: var(--editor-text);
-  font: inherit;
-  font-weight: 600;
-}
-.text-editor .cm-panel.cm-search button.cm-button:hover { border-color: var(--button-hover-border); background: var(--button-hover-bg); }
-.text-editor .cm-panel.cm-search label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
-.text-editor .cm-panel.cm-search button[name="close"] {
-  margin-left: auto;
-  padding: 0 6px;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font-size: 16px;
-  cursor: pointer;
+.text-search::placeholder { color: var(--editor-placeholder); }
+.text-search:focus { outline: none; border-color: var(--editor-focus); box-shadow: 0 0 0 1px var(--editor-focus); }
+.text-strip-search button { min-height: 24px; padding: 2px 8px; font-size: 11px; }
+.text-match-count { min-width: 0; color: var(--muted); font-size: 11px; white-space: nowrap; }
+/* Narrow screens: same as the tree search, its own full-width row. */
+@media (max-width: 520px) {
+  .text-strip-search { flex: 1 1 100%; order: 3; gap: 4px; }
+  .text-search { min-width: 0; max-width: none; }
+  .text-match-count { font-size: 10px; }
+  .text-strip-search button { min-height: 34px; }
 }
 
 .editor-frame[data-view="tree"] .text-editor { display: none; }

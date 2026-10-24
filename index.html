@@ -147,6 +147,20 @@
               <button id="viewTextBtn" type="button" aria-pressed="true">Text</button>
               <button id="viewTreeBtn" type="button" aria-pressed="false">Tree</button>
             </div>
+            <div class="text-strip-search" data-view-scope="text" role="search">
+              <input
+                id="textSearch"
+                class="text-search"
+                type="search"
+                placeholder="Search text…"
+                aria-label="Search the text"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <button id="textPrev" type="button" title="Previous match (Shift+Enter)" aria-label="Previous text search match">↑</button>
+              <button id="textNext" type="button" title="Next match (Enter)" aria-label="Next text search match">↓</button>
+              <span id="textMatchCount" class="text-match-count" aria-live="polite"></span>
+            </div>
             <div class="tree-strip-search" data-view-scope="tree">
               <input
                 id="treeSearch"

@@ -144,9 +144,59 @@ host.addEventListener('input', () => { inputs += 1; });
   assert.equal(host.value, '{"a":1}', 'Ctrl+Enter does not insert a line (the app formats instead)');
   assert.equal(seen, 1, 'Ctrl+Enter still reaches the app on the host');
 
-  content().dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'f', ctrlKey: true, bubbles: true, cancelable: true }));
+  let finds = 0;
+  editor.search.onFind(() => { finds += 1; });
+  const find = new dom.window.KeyboardEvent('keydown', { key: 'f', ctrlKey: true, bubbles: true, cancelable: true });
+  content().dispatchEvent(find);
   await sleep(20);
-  assert.ok(host.querySelector('.cm-search'), 'Ctrl+F opens the editor search panel');
+  assert.equal(finds, 1, 'Ctrl+F inside the editor asks the app to open its search box');
+  assert.equal(find.defaultPrevented, true, "the browser's find bar does not open over the editor");
+  assert.equal(host.querySelector('.cm-search'), null, "CodeMirror's own search panel is not used");
+}
+
+// --- Search API: query, highlight, step, count --------------------------------
+{
+  const api = editor.search;
+  let changes = 0;
+  api.onChange(() => { changes += 1; });
+  host.value = 'alpha beta ALPHA gamma alpha';
+  assert.equal(changes, 1, 'a new payload notifies search listeners');
+  host.setSelectionRange(0, 0);
+  api.setQuery('alpha');
+  assert.deepEqual(api.stats(), { total: 3, index: -1, truncated: false }, 'matches are counted case-insensitively');
+  assert.equal(api.next(), true);
+  assert.deepEqual([host.selectionStart, host.selectionEnd], [0, 5], 'next selects the first match');
+  assert.equal(api.stats().index, 0);
+  api.next();
+  assert.deepEqual([host.selectionStart, host.selectionEnd], [11, 16], 'next steps to the second match');
+  api.previous();
+  assert.equal(api.stats().index, 0, 'previous steps back');
+  api.previous();
+  assert.equal(api.stats().index, 2, 'previous wraps to the last match');
+  await sleep(20);
+  assert.equal(host.querySelectorAll('.cm-searchMatch').length, 3, 'visible matches are highlighted');
+  assert.equal(host.querySelectorAll('.cm-searchMatch-selected').length, 1, 'the current match stands out');
+
+  host.value = 'alpha again, alpha';
+  assert.equal(api.stats().total, 2, 'the query survives a new payload');
+  view.dispatch({ changes: { from: 0, insert: 'alpha ' }, userEvent: 'input.type' });
+  assert.equal(api.stats().total, 3, 'counts follow user edits');
+  assert.ok(changes >= 3, 'user edits notify search listeners');
+
+  host.setSelectionRange(6, 11);
+  assert.equal(api.selectedText(), 'alpha', 'the selection can seed the search box');
+  host.value = 'multi\nline';
+  host.select();
+  assert.equal(api.selectedText(), '', 'multi-line selections do not seed the search box');
+
+  api.setQuery('');
+  assert.equal(api.next(), false, 'an empty query finds nothing');
+  assert.equal(host.querySelectorAll('.cm-searchMatch').length, 0, 'clearing the query clears highlights');
+
+  host.value = Array.from({ length: 12_000 }, () => 'x').join('\n');
+  api.setQuery('x');
+  assert.deepEqual(api.stats(), { total: 10_000, index: -1, truncated: true }, 'counting stops at 10,000 (shown as 10000+)');
+  api.setQuery('');
 }
 
 // --- Large document: only the visible lines are rendered ---------------------
@@ -205,6 +255,64 @@ host.addEventListener('input', () => { inputs += 1; });
   assert.equal(appHost.readOnly, true, 'Back returns to the large payload (as its read-only preview)');
   assert.ok(appHost.value.startsWith('{"pad":"xxx') && appHost.value.includes('more chars not shown'),
     'the preview shows the start of the large payload');
+}
+
+// --- App: the strip search box ------------------------------------------------
+{
+  const appDom = new JSDOM(html, { url: 'http://localhost/', pretendToBeVisual: true });
+  installGlobals(appDom);
+  const app = await import('./app.js?code-editor=2');
+  await app.__historyHydrated();
+  const doc = appDom.window.document;
+  const appHost = doc.querySelector('#payloadInput');
+  const box = doc.querySelector('#textSearch');
+  const count = doc.querySelector('#textMatchCount');
+  const strip = html.match(/<div class="editor-strip"[^>]*>([\s\S]*?)<\/div>\s*<div class="editor-body"/)?.[1];
+  assert.match(strip, /<div class="text-strip-search" data-view-scope="text"/, 'the text search box lives in the strip, text view only');
+  assert.equal(doc.querySelector('#textPrev').disabled, true, 'arrows start disabled');
+
+  appHost.value = '{"name":"user1","friend":"user2","note":"USER3"}';
+  appHost.dispatchEvent(new appDom.window.Event('input', { bubbles: true }));
+  const type = async (text) => {
+    box.value = text;
+    box.dispatchEvent(new appDom.window.Event('input', { bubbles: true }));
+    await sleep(250);
+  };
+  const key = (name, extra = {}) => box.dispatchEvent(new appDom.window.KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true, ...extra }));
+
+  await type('user');
+  assert.equal(count.textContent, '1 / 3', 'typing finds and counts matches, selecting the first');
+  assert.equal(appHost.value.slice(appHost.selectionStart, appHost.selectionEnd), 'user');
+  assert.equal(doc.querySelector('#textNext').disabled, false);
+  key('Enter');
+  assert.equal(count.textContent, '2 / 3', 'Enter steps to the next match');
+  key('Enter', { shiftKey: true });
+  assert.equal(count.textContent, '1 / 3', 'Shift+Enter steps back');
+  doc.querySelector('#textPrev').click();
+  assert.equal(count.textContent, '3 / 3', 'the arrows step too, wrapping around');
+
+  await type('nothing-here');
+  assert.equal(count.textContent, 'No matches');
+
+  await type('user');
+  appHost.value = '{"a":"user"}';
+  await sleep(300);
+  assert.equal(count.textContent, '1 match', 'the count follows a new payload');
+
+  key('Escape');
+  assert.equal(box.value, '', 'Escape clears the search');
+  assert.equal(count.textContent, '');
+
+  const find = new appDom.window.KeyboardEvent('keydown', { key: 'f', metaKey: true, bubbles: true, cancelable: true });
+  doc.querySelector('#clearBtn').dispatchEvent(find);
+  assert.equal(find.defaultPrevented, true, 'Cmd/Ctrl+F anywhere in text view is taken over');
+  assert.equal(doc.activeElement, box, 'Cmd/Ctrl+F focuses the search box');
+
+  doc.querySelector('#viewTreeBtn').click();
+  const treeFind = new appDom.window.KeyboardEvent('keydown', { key: 'f', ctrlKey: true, bubbles: true, cancelable: true });
+  doc.body.dispatchEvent(treeFind);
+  assert.equal(treeFind.defaultPrevented, false, 'tree view keeps the browser shortcut');
+  doc.querySelector('#viewTextBtn').click();
 }
 
 console.log('All CodeMirror text editor tests passed.');

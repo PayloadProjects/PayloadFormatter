@@ -23,6 +23,7 @@ const files = [
   'input-normalization.js',
   'xml-format.js',
   'text-editor.js',
+  'text-search.js',
   'text-editor.css',
   'vendor/codemirror/codemirror.js',
   'vendor/codemirror/LICENSE',
