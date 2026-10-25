@@ -124,14 +124,21 @@ const searchMatchHighlighter = ViewPlugin.fromClass(class {
   }
 }, { decorations: (plugin) => plugin.decorations });
 
-// Wrap mode: continuation rows of a wrapped line line up under the line's
-// own indentation (plus two columns, so they read as a continuation)
-// instead of restarting at the left edge. Each visible line carries its
-// indentation width as --hang; the theme turns that into a padding-left /
-// negative text-indent pair, which leaves the first row where it was.
+// Wrap mode: continuation rows of a wrapped line line up under the start of
+// its value, so a long `"about": "Proident …"` continues under the "P"
+// rather than at the left edge. Other lines (array items, XML, plain text)
+// hang under their own indentation plus two columns, so they read as a
+// continuation. Each visible line carries the width as --hang; the theme
+// turns that into a padding-left / negative text-indent pair, which leaves
+// the first row where it was.
 const HANG_EXTRA_COLUMNS = 2;
 // Very deep indentation would squeeze continuation rows into a sliver.
 const MAX_HANG_COLUMNS = 40;
+// Aligning under a value may go further right, up to this column; past it
+// (a very long key) the line falls back to the indentation rule.
+const MAX_VALUE_HANG_COLUMNS = 60;
+// `"key": ` plus the opening quote of a string value.
+const JSON_KEY_PREFIX = /^"(?:[^"\\]|\\.)*"\s*:\s*"?/;
 const hangDecorations = new Map();
 
 function hangDecoration(columns) {
@@ -168,8 +175,14 @@ const hangingIndent = ViewPlugin.fromClass(class {
     for (const { from, to } of view.visibleRanges) {
       for (let pos = from; pos <= to;) {
         const line = doc.lineAt(pos);
-        const indent = indentColumns(line.text.slice(0, MAX_HANG_COLUMNS * tabSize), tabSize);
-        builder.add(line.from, line.from, hangDecoration(Math.min(indent, MAX_HANG_COLUMNS) + HANG_EXTRA_COLUMNS));
+        const head = line.text.slice(0, MAX_VALUE_HANG_COLUMNS * tabSize);
+        const indent = indentColumns(head, tabSize);
+        const key = head.trimStart().match(JSON_KEY_PREFIX);
+        const valueColumn = key ? indent + key[0].length : Infinity;
+        const hang = valueColumn <= MAX_VALUE_HANG_COLUMNS
+          ? valueColumn
+          : Math.min(indent, MAX_HANG_COLUMNS) + HANG_EXTRA_COLUMNS;
+        builder.add(line.from, line.from, hangDecoration(hang));
         pos = line.to + 1;
       }
     }
