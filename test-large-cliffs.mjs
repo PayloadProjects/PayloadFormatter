@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { shimLayout } from './test-support.mjs';
+import { shimLayout, settleAfter } from './test-support.mjs';
 import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
 import { createPayloadHistory } from './payload-history.js';
@@ -335,15 +335,15 @@ function treeControllerFor(dom, payload, mode) {
   await sleep(50);
   const tabs = [...doc.querySelectorAll('.window-tab')];
   tabs[0].click(); // back to window 1
-  await sleep(50);
+  await settleAfter(tabs[0], 50);
 
   editor.value = nine + ' ';
   editor.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
   await sleep(50); // well inside the 250ms debounce
   tabs[1].click(); // switch: activateWindow must flush the 9MB update synchronously
-  await sleep(400); // let any stray timer fire (it must be a no-op duplicate)
+  await settleAfter(tabs[1], 400); // let any stray timer fire (it must be a no-op duplicate)
   tabs[0].click();
-  await sleep(50);
+  await settleAfter(tabs[0], 50);
 
   const back = doc.querySelector('#historyBackBtn');
   assert.equal(back.disabled, false, 'typed 9MB entry flushed on switch, not lost');
@@ -366,7 +366,7 @@ function treeControllerFor(dom, payload, mode) {
   await sleep(100);
   await ctrlVPaste(dom, editor, '{"small":1}');
   doc.querySelector('#historyBackBtn').click();
-  await sleep(50);
+  await settleAfter(doc.querySelector('#historyBackBtn'), 50);
   assert.equal(editor.value, nine, 'Back skips the empty clear entry at 9MB scale');
 }
 

@@ -10,3 +10,17 @@ export function shimLayout(window) {
   }
   if (!proto.getBoundingClientRect) proto.getBoundingClientRect = emptyRect;
 }
+
+// History Back/Forward is synchronous for entries still in memory, but an
+// entry kept only in storage is loaded first, with the page marked busy
+// (body.busy) until it lands. On a slow CI runner that load can outlast any
+// fixed delay, so after clicking a history button wait for the short delay
+// and then for the app to leave the busy state.
+export async function settleAfter(element, ms = 50, timeoutMs = 10000) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+  const body = element?.ownerDocument?.body;
+  const deadline = Date.now() + timeoutMs;
+  while (body?.classList.contains('busy') && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
