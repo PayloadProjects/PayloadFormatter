@@ -8,7 +8,7 @@ const [app, html] = await Promise.all([
 
 assert.ok(html.includes('id="pasteFormatBtn"'),
   'combined Paste & Format button must exist');
-assert.ok(html.includes('Paste &amp; Format'),
+assert.ok(html.includes('Paste and format'),
   'combined action must be clearly labeled');
 assert.ok(!html.includes('id="pasteBtn"') && !html.includes('id="formatBtn"'),
   'separate Paste and Format buttons must be removed');

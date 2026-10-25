@@ -27,10 +27,16 @@ function luminance(hex) {
   return rgb[0]*0.2126+rgb[1]*0.7152+rgb[2]*0.0722;
 }
 function contrast(a,b) {const x=luminance(a),y=luminance(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05);}
-assert.ok(luminance(resolve(dark,'--editor-bg'))<.006,'dark reading surface stays near-black');
-assert.ok(luminance(resolve(dark,'--editor-bg'))<luminance(resolve(dark,'--page-bg')));
+assert.ok(luminance(resolve(dark,'--editor-bg'))<.01,'dark reading surface stays near-black');
+// Nocturne: the page is the darkest layer and the panel is lifted off it,
+// so the card edge reads clearly; the toolbar band is lifted again.
+assert.ok(luminance(resolve(dark,'--page-bg'))<luminance(resolve(dark,'--editor-bg')),'dark panel is lifted off the page');
+assert.ok(luminance(resolve(dark,'--editor-bg'))<luminance(resolve(dark,'--strip-bg')),'dark toolbar band is lifted off the panel');
+assert.ok(luminance(resolve(light,'--page-bg'))<luminance(resolve(light,'--panel-bg')),'light page sits below the white panel');
+assert.ok(contrast(resolve(dark,'--divider'),resolve(dark,'--panel-bg'))>=1.6,'dark dividers are clearly visible');
+assert.ok(contrast(resolve(light,'--divider'),resolve(light,'--panel-bg'))>=1.3,'light dividers are clearly visible');
 assert.ok(luminance(resolve(light,'--editor-bg'))>.9,'light mode remains light');
-const readingTokens=['--editor-text','--syntax-key','--syntax-string','--syntax-number','--syntax-boolean','--syntax-attribute','--syntax-muted'];
+const readingTokens=['--editor-text','--syntax-key','--syntax-string','--syntax-number','--syntax-boolean','--syntax-null','--syntax-attribute','--syntax-muted'];
 for(const [theme,tokens] of [['dark',dark],['light',light]]) {
   for(const token of readingTokens) {
     const foreground=resolve(tokens,token);

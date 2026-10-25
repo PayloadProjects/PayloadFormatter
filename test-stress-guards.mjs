@@ -153,7 +153,7 @@ function installGlobals(dom) {
   assert.equal(editor.readOnly, true, '12MB payload is read-only');
   assert.equal(editor.classList.contains('large-mode'), true, '12MB payload gets large-mode chrome');
   assert.equal(notice.hidden, false, 'large-mode notice is shown');
-  assert.ok(notice.textContent.includes('12.58M chars') && notice.textContent.includes('read-only'),
+  assert.ok(notice.textContent.includes('12.00 MB') && notice.textContent.includes('read-only'),
     'notice names the payload size and the read-only state');
 }
 

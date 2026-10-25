@@ -404,6 +404,52 @@ function toggleLong(element) {
   element.classList.toggle('expanded', element._open);
 }
 
+// Collapsed containers show their first few values inline, so a closed
+// row still says what it holds. Hidden by CSS while the node is open.
+const PREVIEW_ITEMS = 3;
+const PREVIEW_VALUE_CHARS = 28;
+function previewValue(value) {
+  const text = jsonDisplayValue(value);
+  return text.length > PREVIEW_VALUE_CHARS ? `${text.slice(0, PREVIEW_VALUE_CHARS - 1)}…` : text;
+}
+function jsonPreview(node) {
+  const { value } = node;
+  const parts = [];
+  if (Array.isArray(value)) {
+    for (let i = 0; i < Math.min(value.length, PREVIEW_ITEMS); i += 1) parts.push(previewValue(value[i]));
+  } else {
+    const keys = node.keys || Object.keys(value);
+    for (let i = 0; i < Math.min(keys.length, PREVIEW_ITEMS); i += 1) {
+      parts.push(`${keys[i]}: ${previewValue(value[keys[i]])}`);
+    }
+  }
+  const more = node.count > PREVIEW_ITEMS ? ' …' : '';
+  const preview = span('tree-preview', parts.join(', ') + more);
+  preview.setAttribute('aria-hidden', 'true');
+  return preview;
+}
+
+// Numbers that look like a Unix timestamp (seconds or milliseconds between
+// 2000 and 2100) under a time-like key get a readable UTC date chip.
+const EPOCH_KEY = /(?:^|_|[a-z])(?:at|At|time|Time|TIME|date|Date|DATE|ts|Ts|TS|stamp|Stamp|exp|iat|nbf)$|^(?:created|updated|modified|expires|timestamp|time|date|ts|exp|iat|nbf)/;
+const EPOCH_MIN_S = 946_684_800;
+const EPOCH_MAX_S = 4_102_444_800;
+const epochFormat = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC',
+});
+function epochChip(node) {
+  if (node.type !== 'number' || node.inArray || node.key === null || !EPOCH_KEY.test(String(node.key))) return null;
+  const n = node.value;
+  if (!Number.isFinite(n)) return null;
+  let ms = null;
+  if (n >= EPOCH_MIN_S && n < EPOCH_MAX_S) ms = n * 1000;
+  else if (n >= EPOCH_MIN_S * 1000 && n < EPOCH_MAX_S * 1000) ms = n;
+  if (ms === null) return null;
+  const chip = span('tree-epoch', `${epochFormat.format(new Date(ms))} UTC`);
+  chip.title = new Date(ms).toISOString();
+  return chip;
+}
+
 function jsonLabel(node) {
   const parts = [];
   if (node.key !== null) {
@@ -492,7 +538,7 @@ export function highlightRanges(text, needles) {
   return merged;
 }
 
-export function createTreeView(container, { onCopyPath } = {}) {
+export function createTreeView(container, { onCopyPath, onSelect } = {}) {
   let root = null;
   let rootLi = null;
   let rowCount = 0;
@@ -514,6 +560,7 @@ export function createTreeView(container, { onCopyPath } = {}) {
     rootLi = null;
     rowCount = 0;
     focusedRow = null;
+    onSelect?.(null);
     matches = [];
     current = -1;
     hitLi = null;
@@ -522,7 +569,7 @@ export function createTreeView(container, { onCopyPath } = {}) {
     paintNeedles = [];
   }
 
-  function showMessage(title, detail, tone = '') {
+  function showMessage(title, detail, tone = '', action = null) {
     reset();
     container.setAttribute('role', 'region');
     const box = document.createElement('div');
@@ -534,6 +581,14 @@ export function createTreeView(container, { onCopyPath } = {}) {
       const paragraph = document.createElement('p');
       paragraph.textContent = detail;
       box.appendChild(paragraph);
+    }
+    if (action) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'primary';
+      button.textContent = action.label;
+      button.addEventListener('click', action.run);
+      box.appendChild(button);
     }
     container.appendChild(box);
   }
@@ -560,6 +615,11 @@ export function createTreeView(container, { onCopyPath } = {}) {
     toggle.setAttribute('aria-hidden', 'true');
     row.appendChild(toggle);
     for (const part of node.kind === 'json' ? jsonLabel(node) : xmlLabel(node)) row.appendChild(part);
+    if (node.kind === 'json') {
+      if (node.container && node.type !== 'string') row.appendChild(jsonPreview(node));
+      const chip = epochChip(node);
+      if (chip) row.appendChild(chip);
+    }
 
     const copy = document.createElement('button');
     copy.type = 'button';
@@ -580,9 +640,10 @@ export function createTreeView(container, { onCopyPath } = {}) {
   // Unwrapping first keeps repainting (new search, stepped hit, re-render)
   // from ever nesting highlight spans. Matching runs over the row's whole
   // visible text, so a `"key": "value"` or `attr="value"` hit spanning
-  // several label spans is painted too. The array-position label, toggle
-  // and copy button are not payload text and are never painted.
-  const UNPAINTED = '.tree-copy, .tree-toggle, .tree-index';
+  // several label spans is painted too. The array-position label, toggle,
+  // collapsed preview, date chip and copy button are not the row's own
+  // payload text and are never painted.
+  const UNPAINTED = '.tree-copy, .tree-toggle, .tree-index, .tree-preview, .tree-epoch';
   function paintRowHits(li) {
     const row = li.firstElementChild;
     if (!row) return;
@@ -746,6 +807,7 @@ export function createTreeView(container, { onCopyPath } = {}) {
     if (focusedRow && focusedRow !== row) focusedRow.tabIndex = -1;
     row.tabIndex = 0;
     focusedRow = row;
+    onSelect?.(row.closest('.tree-node')?._node || null);
     row.focus({ preventScroll: !scroll });
     if (scroll) row.scrollIntoView({ block: 'nearest' });
   }
@@ -864,6 +926,7 @@ export function createTreeView(container, { onCopyPath } = {}) {
     hitLi = li;
     li.classList.add('tree-hit');
     li.setAttribute('aria-current', 'true');
+    onSelect?.(li._node);
     expandHiddenHit(li);
     li.firstElementChild.scrollIntoView({ block: 'center' });
   }
@@ -949,8 +1012,9 @@ export function createTreeView(container, { onCopyPath } = {}) {
       }
     },
 
-    clear(message) {
-      showMessage(message || 'Nothing to show yet.', '');
+    // Optional detail line and one action button ({ label, run }).
+    clear(message, detail = '', action = null) {
+      showMessage(message || 'Nothing to show yet.', detail, '', action);
     },
 
     expandAll() {

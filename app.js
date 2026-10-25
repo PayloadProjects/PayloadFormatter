@@ -4,6 +4,8 @@ import { createSyntaxEditor } from './text-editor.js';
 import { createTextSearch } from './text-search.js';
 import { createWindowManager, MAX_WINDOWS } from './window-manager.js';
 import { initEpochPopover } from './epoch-popover.js';
+import { createInspector, selectionFromTreeNode } from './inspector.js';
+import { createMinimap } from './minimap.js';
 import {
   getTabId,
   touchTabHeartbeat,
@@ -58,13 +60,14 @@ const typeBadge = document.querySelector('#typeBadge');
 const metaText = document.querySelector('#metaText');
 const largeNotice = document.querySelector('#largeNotice');
 const themeToggleBtn = document.querySelector('#themeToggleBtn');
-const themeIcon = document.querySelector('#themeIcon');
 const themeLabel = document.querySelector('#themeLabel');
 const wrapToggleBtn = document.querySelector('#wrapToggleBtn');
 const historyBackBtn = document.querySelector('#historyBackBtn');
 const historyForwardBtn = document.querySelector('#historyForwardBtn');
 const windowTabs = document.querySelector('#windowTabs');
 const newWindowBtn = document.querySelector('#newWindowBtn');
+const cursorPos = document.querySelector('#cursorPos');
+const kbdHint = document.querySelector('#kbdHint');
 const root = document.documentElement;
 
 let busy = false;
@@ -94,6 +97,11 @@ let history = null;
 // Recently active windows (most recent first) whose current entry stays
 // resident; see RECENT_RESIDENT_WINDOWS.
 let recentWindowIds = [];
+// Path bar + Inspector; created after the tree controller, which can report
+// a selection while it builds.
+let inspector = null;
+let treeSelection = null;
+let selectionTimer = 0;
 
 const treeController = createTreeController({
   getText: getPayloadText,
@@ -106,6 +114,11 @@ const treeController = createTreeController({
   // later window switch (or return to tree view) restores it.
   onTreeHide: () => { if (activeWindow) stashTreeUi(activeWindow); },
   getTreeRestore: () => activeWindow?.ui.tree,
+  onSelect: (node) => {
+    treeSelection = selectionFromTreeNode(node);
+    if (treeController?.isTree()) syncSelection();
+  },
+  onViewChange: () => syncSelection(),
 });
 
 // The strip's text search box. It follows edits and payload swaps on its
@@ -116,6 +129,33 @@ createTextSearch({
   isTextView: () => !treeController.isTree(),
   isPreview: () => inLargeMode(),
 });
+
+inspector = createInspector({
+  getText: getPayloadText,
+  getMode: () => activeWindow?.meta?.mode ?? detectModeFast(getPayloadText()),
+  getSize: () => (activeWindow?.meta?.bytes ? formatBytes(activeWindow.meta.bytes) : ''),
+  isPreview: inLargeMode,
+  copyText: copyWithStatus,
+  history: {
+    list: () => (history ? { entries: history.entries(), index: history.index() } : { entries: [], index: -1 }),
+    jump: jumpToHistory,
+  },
+});
+
+// Status bar: cursor position (text view, not in a read-only preview) and
+// the format shortcut in this platform's spelling.
+syntaxEditor.onCursor(syncCursorPos);
+syntaxEditor.onCursor(scheduleSelection);
+
+// Minimap beside the text editor (redrawn per frame at most).
+const textEditorEl = document.querySelector('#textEditor');
+if (textEditorEl && syntaxEditor.view && typeof requestAnimationFrame === 'function') {
+  const minimap = createMinimap({ view: syntaxEditor.view, container: textEditorEl });
+  syntaxEditor.onCursor(minimap.cursorMoved);
+}
+if (kbdHint && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '')) {
+  kbdHint.textContent = '⌘↵ format';
+}
 
 initializeTheme();
 initializeWrap();
@@ -352,7 +392,8 @@ function currentTheme() {
 function applyTheme(theme, { persist = false } = {}) {
   const next = theme === 'light' ? 'light' : 'dark';
   root.dataset.theme = next;
-  root.style.colorScheme = next;
+  // "only" stops the browser's automatic dark mode from recoloring light.
+  root.style.colorScheme = `only ${next}`;
   updateThemeControl(next);
 
   if (persist) {
@@ -360,10 +401,43 @@ function applyTheme(theme, { persist = false } = {}) {
   }
 }
 
+// The path bar follows the text cursor or the selected tree row. Cursor
+// moves are coalesced so holding an arrow key stays cheap.
+function syncSelection() {
+  if (!inspector) return;
+  inspector.setSelection(treeController.isTree() ? treeSelection : syntaxEditor.selection());
+}
+
+function scheduleSelection() {
+  if (selectionTimer) return;
+  selectionTimer = setTimeout(() => {
+    selectionTimer = 0;
+    syncSelection();
+  }, 50);
+}
+
+async function copyWithStatus(text, message) {
+  try {
+    await writeToClipboard(text);
+    setStatus(message, 'success');
+  } catch (_) {
+    setStatus('Browser blocked clipboard access.', 'error');
+  }
+}
+
+function syncCursorPos() {
+  if (!cursorPos) return;
+  if (inLargeMode() || !editor.value) {
+    cursorPos.textContent = '';
+    return;
+  }
+  const { line, col } = syntaxEditor.cursor();
+  cursorPos.textContent = `Ln ${line.toLocaleString()}, Col ${col.toLocaleString()}`;
+}
+
 function updateThemeControl(theme) {
   if (!themeToggleBtn) return;
   const next = theme === 'light' ? 'dark' : 'light';
-  if (themeIcon) themeIcon.textContent = theme === 'light' ? '☾' : '☀';
   if (themeLabel) themeLabel.textContent = theme === 'light' ? 'Dark mode' : 'Light mode';
   themeToggleBtn.dataset.theme = theme;
   themeToggleBtn.setAttribute('aria-label', `Switch to ${next} mode`);
@@ -794,11 +868,17 @@ function renderWindowBar() {
     select.type = 'button';
     select.className = 'window-tab-select';
     select.title = `${win.name} — drag to reorder, Alt+←/→ to move, double-click to rename`;
+    const dot = document.createElement('span');
+    dot.className = 'window-tab-dot';
+    dot.setAttribute('aria-hidden', 'true');
     const name = document.createElement('span');
     name.className = 'window-tab-name';
     name.textContent = win.name;
-    select.append(name);
+    const size = document.createElement('span');
+    size.className = 'window-tab-size';
+    select.append(dot, name, size);
     tab.append(select);
+    paintTabMeta(tab, windowMeta(win));
 
     if (showClose) {
       const close = document.createElement('button');
@@ -811,6 +891,30 @@ function renderWindowBar() {
     }
     windowTabs.append(tab);
   }
+}
+
+// Type and size shown on a window's tab. The active window's come from the
+// live UI refresh; other windows fall back to their stored draft.
+function windowMeta(win) {
+  if (win.meta) return win.meta;
+  const text = win.payload || '';
+  if (!text || text.length >= LARGE_UI_PAYLOAD_CHARS) return null;
+  win.meta = { mode: detectModeFast(text), bytes: utf8ByteLength(text) };
+  return win.meta;
+}
+
+function paintTabMeta(tab, meta) {
+  const dot = tab.querySelector('.window-tab-dot');
+  const size = tab.querySelector('.window-tab-size');
+  if (dot) dot.className = `window-tab-dot${meta?.mode ? ` ${meta.mode}` : ''}`;
+  if (size) size.textContent = meta?.bytes ? formatBytes(meta.bytes) : '';
+}
+
+function setActiveMeta(mode, bytes) {
+  if (!activeWindow) return;
+  activeWindow.meta = { mode, bytes };
+  const tab = windowTabs?.querySelector(`.window-tab[data-window-id="${activeWindow.id}"]`);
+  if (tab) paintTabMeta(tab, activeWindow.meta);
 }
 
 function startRename(tabEl) {
@@ -884,6 +988,44 @@ function applyHistoryUpdate() {
 function syncHistoryNav() {
   if (historyBackBtn) historyBackBtn.disabled = busy || !history.canBack();
   if (historyForwardBtn) historyForwardBtn.disabled = busy || !history.canForward();
+  inspector?.refreshHistory();
+}
+
+// Inspector history list: jump straight to one entry of this window.
+async function jumpToHistory(position) {
+  if (busy || position === history.index()) return;
+  const win = activeWindow;
+  const h = history;
+  const entry = h.entryAt(position);
+  if (!entry || !entry.chars) return;
+  let text = entry.text;
+  if (text === null) {
+    setBusy(true);
+    setStatus('Loading payload…');
+    try {
+      const loaded = await loadEntry(entry.id);
+      if (loaded !== null && loaded.length === entry.chars) {
+        h.setText(entry, loaded);
+        text = loaded;
+      }
+    } finally {
+      setBusy(false);
+    }
+    if (text === null) {
+      h.removeAt(position);
+      saveHistoryFor(win);
+      syncHistoryNav();
+      setStatus('That payload is no longer stored (removed to free space).', 'warning');
+      return;
+    }
+  }
+  if (win !== activeWindow) return;
+  h.moveTo(position);
+  setPayloadText(text);
+  releaseIdle(win);
+  syncHistoryNav();
+  saveHistoryFor(win);
+  setStatus('Restored payload from history.', 'success');
 }
 
 // Replaces the visible payload wholesale (history navigation, window
@@ -978,12 +1120,52 @@ function enterLargeMode(text, { formatted = false } = {}) {
   clearStoredDraft();
 
   if (largeNotice) {
-    const size = `${formatCharacterCount(text.length)} chars`;
-    largeNotice.textContent = formatted
-      ? `Large formatted payload (${size}) · read-only preview. Copy uses the full formatted output.`
-      : `Large payload (${size}) · read-only preview. Format and Copy use the full payload.`;
+    renderLargeNotice(text.length, formatted);
     largeNotice.hidden = false;
   }
+}
+
+// Amber banner under the toolbar: what is shown, and that Copy and Format
+// still use the full payload. Built from text nodes, never HTML.
+function renderLargeNotice(chars, formatted) {
+  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  icon.setAttribute('class', 'large-notice-icon');
+  icon.setAttribute('width', '16');
+  icon.setAttribute('height', '16');
+  icon.setAttribute('viewBox', '0 0 24 24');
+  icon.setAttribute('fill', 'none');
+  icon.setAttribute('stroke', 'currentColor');
+  icon.setAttribute('stroke-width', '2');
+  icon.setAttribute('stroke-linecap', 'round');
+  icon.setAttribute('stroke-linejoin', 'round');
+  icon.setAttribute('aria-hidden', 'true');
+  for (const [tag, attrs] of [
+    ['rect', { x: '5', y: '11', width: '14', height: '10', rx: '2' }],
+    ['path', { d: 'M8 11V7a4 4 0 0 1 8 0v4' }],
+  ]) {
+    const part = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (const [name, value] of Object.entries(attrs)) part.setAttribute(name, value);
+    icon.append(part);
+  }
+
+  const copy = document.createElement('span');
+  copy.className = 'large-notice-text';
+  const title = document.createElement('strong');
+  title.textContent = `${formatted ? 'Large formatted payload' : 'Large payload'} · ${formatBytes(chars)} · read-only preview.`;
+  const detail = document.createElement('span');
+  detail.className = 'large-notice-detail';
+  detail.textContent = ` Showing the first ${Math.min(chars, PREVIEW_CHARS).toLocaleString()} characters. ` +
+    (formatted
+      ? 'Copy uses the full formatted output; Tree view works up to 10 MB.'
+      : 'Copy and Format always use the full payload; Tree view works up to 10 MB.');
+  copy.append(title, detail);
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = 'Copy full payload';
+  button.addEventListener('click', copyPayload);
+
+  largeNotice.replaceChildren(icon, copy, button);
 }
 
 function exitLargeMode() {
@@ -1284,6 +1466,10 @@ function refreshUiQuick(text, forcedMode = null) {
   // large paste can paint immediately. Exact metrics are available after
   // formatting, when the worker already returns them.
   metaText.textContent = `${formatCharacterCount(text.length)} chars · large payload`;
+  setActiveMeta(mode, text.length);
+  syncCursorPos();
+  inspector?.refreshPayload();
+  scheduleSelection();
   syntaxEditor.refresh(mode);
 }
 
@@ -1301,6 +1487,10 @@ function refreshUi(forcedMode = null, metrics = null) {
   const lines = Number.isFinite(metrics?.lineCount) ? metrics.lineCount : countLinesFast(text);
   const bytes = Number.isFinite(metrics?.bytes) ? metrics.bytes : utf8ByteLength(text);
   metaText.textContent = `${lines.toLocaleString()} ${lines === 1 ? 'line' : 'lines'} · ${formatBytes(bytes)}`;
+  setActiveMeta(mode, bytes);
+  syncCursorPos();
+  inspector?.refreshPayload();
+  scheduleSelection();
   syntaxEditor.refresh(mode);
 }
 

@@ -10,8 +10,8 @@
   min-width: 0;
   overflow: hidden;
   background: var(--editor-bg);
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 14px;
+  font-family: var(--font-mono);
+  font-size: 13.5px;
   line-height: 24px;
 }
 .text-editor .editor { font: inherit; line-height: inherit; }
@@ -31,39 +31,60 @@
 .syntax-string { color: var(--syntax-string); }
 .syntax-number { color: var(--syntax-number); }
 .syntax-boolean, .syntax-entity { color: var(--syntax-boolean); }
+.syntax-null { color: var(--syntax-null); }
 .syntax-attribute { color: var(--syntax-attribute); }
 .syntax-muted, .syntax-comment { color: var(--syntax-muted); }
 
-/* Text-view search box in the editor strip (text-search.js); sized like
-   the tree search beside it, which only shows in tree view. */
-.text-strip-search { min-width: 0; flex: 1 1 200px; display: flex; align-items: center; gap: 6px; }
-.text-search {
-  min-width: 140px;
-  flex: 1 1 180px;
+/* Toolbar search box (text and tree views share the look): one inset
+   field holding the icon, the query, the "3 / 41" count and ↑ ↓. */
+.strip-search {
+  min-width: 120px;
+  flex: 1 1 140px;
   max-width: 420px;
-  height: 24px;
-  padding: 0 8px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px 0 10px;
   border: 1px solid var(--button-border);
-  border-radius: 7px;
-  background: var(--editor-bg);
-  color: var(--editor-text);
-  font: inherit;
-  font-size: 12px;
+  border-radius: 8px;
+  background: var(--inset);
+  color: var(--faint);
 }
-.text-search::placeholder { color: var(--editor-placeholder); }
-.text-search:focus { outline: none; border-color: var(--editor-focus); box-shadow: 0 0 0 1px var(--editor-focus); }
-.text-strip-search button { min-height: 24px; padding: 2px 8px; font-size: 11px; }
-.text-match-count { min-width: 0; color: var(--muted); font-size: 11px; white-space: nowrap; }
-/* Narrow screens: same as the tree search, its own full-width row. */
+.strip-search:focus-within { border-color: var(--editor-focus); box-shadow: 0 0 0 1px var(--editor-focus); }
+.strip-search-icon { flex: 0 0 auto; display: block; }
+.strip-search input {
+  min-width: 40px;
+  flex: 1 1 auto;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--editor-text);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+.strip-search input:focus { outline: none; }
+.strip-search input::placeholder { color: var(--editor-placeholder); font-family: var(--font-ui); font-size: 13px; }
+.strip-search input::-webkit-search-cancel-button { display: none; }
+.strip-search button { width: 22px; height: 22px; min-height: 22px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--soft); font-size: 13px; }
+.text-match-count, .tree-match-count { flex: 0 0 auto; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.text-strip-search { flex: 1 1 140px; }
+.text-search { min-width: 40px; flex: 1 1 auto; }
+/* Narrow screens: the search gets its own full-width row. */
 @media (max-width: 520px) {
-  .text-strip-search { flex: 1 1 100%; order: 3; gap: 4px; }
-  .text-search { min-width: 0; max-width: none; }
-  .text-match-count { font-size: 10px; }
-  .text-strip-search button { min-height: 34px; }
+  .strip-search { flex: 1 1 100%; max-width: none; height: 34px; }
+  .strip-search button { width: 30px; height: 30px; }
 }
 
 .editor-frame[data-view="tree"] .text-editor { display: none; }
-.text-editor .empty-state { font-family: ui-sans-serif, system-ui, sans-serif; z-index: 2; }
+
+/* Minimap column (minimap.js); hidden while empty and on narrow screens. */
+.minimap { position: relative; flex: 0 0 64px; border-left: 1px solid var(--divider); background: var(--editor-bg); cursor: pointer; touch-action: none; }
+.minimap canvas { position: absolute; inset: 0; display: block; }
+.editor.is-empty ~ .minimap { display: none; }
+@media (max-width: 820px) { .minimap { display: none; } }
+.text-editor .empty-state { font-family: var(--font-ui); z-index: 2; }
 @media (forced-colors: active) {
   .text-editor .cm-selectionBackground { background: Highlight; }
 }

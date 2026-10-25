@@ -183,8 +183,9 @@ const [html, css, app, build, pkg] = await Promise.all(
 
 // --- Wiring: window bar markup ---
 {
-  const bar = html.match(/<div id="editorFrame"[^>]*>\s*<div class="window-bar">([\s\S]*?)<\/div>\s*<div class="editor-strip"/)?.[1];
-  assert.ok(bar, 'window bar is the first thing in the editor card, directly above the editor strip');
+  const bar = html.match(/<\/div>\s*<div class="window-bar">([\s\S]*?)<\/div>\s*<div class="header-tools"/)?.[1];
+  assert.ok(bar, 'window tabs sit in the header, after the brand and before the header tools');
+  assert.ok(html.indexOf('class="window-bar"') < html.indexOf('id="editorFrame"'), 'tabs are above the editor card');
   assert.ok(bar.includes('id="windowTabs"'), 'tab container exists');
   assert.ok(bar.includes('role="tablist"'), 'tabs expose the tablist role');
   assert.ok(bar.includes('id="newWindowBtn"'), 'new-window button exists');
