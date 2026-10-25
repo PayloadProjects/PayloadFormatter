@@ -322,7 +322,8 @@ export function createInspector({ getText, getMode, getSize, isPreview, copyText
       const title = document.createElement('span');
       title.className = 'inspector-history-title';
       const text = entry.text ?? (i === index ? getText() : null);
-      title.textContent = text ? text.slice(0, 120).replace(/\s+/g, ' ').trim() : 'Stored payload';
+      title.textContent = entry.preview
+        || (text ? text.slice(0, 120).replace(/\s+/g, ' ').trim() : 'Stored payload');
       const meta = document.createElement('span');
       meta.className = 'inspector-history-meta';
       meta.textContent = `${i === index ? 'current · ' : ''}${plural(entry.chars, 'char', 'chars')}`;

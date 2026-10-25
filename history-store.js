@@ -82,7 +82,9 @@ async function decode(record) {
 async function normalizeMeta(record) {
   const entries = await Promise.all((Array.isArray(record.entries) ? record.entries : []).map(async (item) => {
     if (item && typeof item === 'object' && !(item instanceof Blob) && typeof item.id === 'string') {
-      return { id: item.id, chars: Number(item.chars) || 0 };
+      const entry = { id: item.id, chars: Number(item.chars) || 0 };
+      if (typeof item.preview === 'string') entry.preview = item.preview;
+      return entry;
     }
     return String(item instanceof Blob ? await item.text() : (item ?? ''));
   }));
@@ -311,14 +313,19 @@ export async function deleteEntries(ids) {
   }));
 }
 
-// Saves a window's entry list ({ entries: [{ id, chars }], index }).
+// Saves a window's entry list ({ entries: [{ id, chars, preview }], index }).
+// The preview is a short label (80 chars) for the Inspector's history list.
 export async function saveWindowHistory(tabId, windowId, snapshot) {
   try {
     await getBackend().putMeta({
       key: keyFor(tabId, windowId),
       tabId,
       windowId,
-      entries: snapshot.entries.map((entry) => ({ id: entry.id, chars: entry.chars })),
+      entries: snapshot.entries.map((entry) => ({
+        id: entry.id,
+        chars: entry.chars,
+        preview: typeof entry.preview === 'string' ? entry.preview.slice(0, 80) : '',
+      })),
       index: snapshot.index,
       updatedAt: Date.now(),
       v: 2,
@@ -329,8 +336,8 @@ export async function saveWindowHistory(tabId, windowId, snapshot) {
   }
 }
 
-// This tab's windows: entry lists only, never payload text (legacy records
-// excepted, see normalizeMeta).
+// This tab's windows: entry lists only (ids, sizes and short previews),
+// never full payload text (legacy records excepted, see normalizeMeta).
 export async function loadWindowHistories(tabId) {
   try {
     const records = await getBackend().getMetas();

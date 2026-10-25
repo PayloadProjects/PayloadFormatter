@@ -56,6 +56,21 @@ const failingBackend = () => {
   assert.equal(revived.back().id, snapshot.entries[0].id);
   assert.equal(revived.back(), null, 'no phantom entries past the start');
 
+  // Each entry carries a short preview so released entries can be labelled.
+  assert.deepEqual(snapshot.entries.map((entry) => entry.preview), ['{"a":1}', '{"b":2}'],
+    'snapshot carries a short preview per entry');
+  assert.equal(revived.entryAt(0).preview, '{"a":1}', 'restored entries keep their preview');
+  const long = createPayloadHistory();
+  long.push(`{\n  "key":   "${'x'.repeat(500)}"\n}`);
+  const longPreview = long.toJSON().entries[0].preview;
+  assert.equal(longPreview.length, 80, 'previews are capped at 80 chars');
+  assert.ok(longPreview.startsWith('{ "key": "x'), 'previews collapse whitespace');
+  const old = createPayloadHistory();
+  old.restore({ entries: [{ id: 'old-1', chars: 7 }], index: 0 });
+  assert.equal(old.entryAt(0).preview, '', 'entries saved before previews start without one');
+  old.setText(old.entryAt(0), '{"c":3}');
+  assert.equal(old.entryAt(0).preview, '{"c":3}', 'and get one once their text is loaded');
+
   const legacy = createPayloadHistory();
   legacy.restore({ entries: ['{"a":1}', '{"b":2}'], index: 0 });
   assert.equal(legacy.current(), '{"a":1}', 'legacy text snapshots restore as resident text');
@@ -292,6 +307,19 @@ async function ctrlVPaste(dom, editor, text) {
   try { editor.setSelectionRange(text.length, text.length); } catch (_) {}
   editor.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
   await sleep(450);
+}
+
+// --- Store: previews survive a save/load round-trip -----------------------
+{
+  __clearMemoryBackend();
+  await saveWindowHistory('preview-tab', 'window-1', {
+    entries: [{ id: 'p1', chars: 7, preview: '{"a":1}' }, { id: 'p2', chars: 7 }],
+    index: 1,
+  });
+  const [record] = await loadWindowHistories('preview-tab');
+  assert.deepEqual(record.entries.map((entry) => entry.preview), ['{"a":1}', ''],
+    'previews are stored with the entry list');
+  __clearMemoryBackend();
 }
 
 __clearMemoryBackend();

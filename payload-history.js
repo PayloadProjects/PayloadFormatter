@@ -6,7 +6,10 @@
 // but navigation skips empty entries: Back/Forward always lands on a real
 // pasted payload, never on the blank left behind by a clear.
 //
-// Entries are { id, chars, text, state }. `text` is null once the caller has
+// Entries are { id, chars, text, state, preview }. `preview` is the first
+// line or so of the payload, whitespace collapsed (PREVIEW_CHARS at most):
+// it is persisted with the entry list so the Inspector can label entries
+// whose text was released. `text` is null once the caller has
 // saved the entry to storage and released it from memory: the model keeps
 // only ids and sizes for those, so a long history in many windows costs
 // almost nothing until an entry is actually viewed again. The caller loads
@@ -18,6 +21,12 @@ const DEFAULT_MAX_ENTRIES = 100;
 // Budget for text held in memory. Saved entries are released, so this only
 // bites when storage is unavailable or an entry is too large to persist.
 const DEFAULT_MAX_BYTES = 32 * 1024 * 1024;
+
+const PREVIEW_CHARS = 80;
+
+export function previewOf(text) {
+  return String(text ?? '').slice(0, PREVIEW_CHARS * 4).replace(/\s+/g, ' ').trim().slice(0, PREVIEW_CHARS);
+}
 
 let idCounter = 0;
 function defaultCreateId() {
@@ -41,8 +50,8 @@ export function createPayloadHistory({
 
   function makeEntry(text) {
     // Empty entries (clears) need no storage: they are "saved" by definition.
-    if (!text) return { id: '', chars: 0, text: '', state: 'saved' };
-    return { id: createId(), chars: text.length, text, state: 'memory' };
+    if (!text) return { id: '', chars: 0, text: '', state: 'saved', preview: '' };
+    return { id: createId(), chars: text.length, text, state: 'memory', preview: previewOf(text) };
   }
 
   function discard(entry) {
@@ -143,7 +152,7 @@ export function createPayloadHistory({
   }
 
   function toDescriptor(entry) {
-    return { id: entry.id, chars: entry.chars };
+    return { id: entry.id, chars: entry.chars, preview: entry.preview || '' };
   }
 
   return {
@@ -174,7 +183,10 @@ export function createPayloadHistory({
     // Makes a loaded entry resident again (after navigation or a window
     // switch brought it back on screen).
     setText(entry, text) {
-      if (entry && entry.chars === text.length) entry.text = text;
+      if (entry && entry.chars === text.length) {
+        entry.text = text;
+        if (!entry.preview) entry.preview = previewOf(text);
+      }
     },
     // Releases the text of saved entries; the current entry is kept unless
     // keepCurrent is false (an inactive window). Returns chars released.
@@ -195,7 +207,7 @@ export function createPayloadHistory({
     },
     toJSON: () => ({ entries: entries.map(toDescriptor), index }),
     // Rebuilds the history from a persisted snapshot; tolerant of bad data.
-    // Entries are descriptors ({ id, chars }, text released) or plain
+    // Entries are descriptors ({ id, chars, preview }, text released) or plain
     // strings (legacy records and tests), which come back as unsaved text.
     restore(data) {
       if (!data || !Array.isArray(data.entries)) return false;
@@ -205,7 +217,9 @@ export function createPayloadHistory({
           const chars = Number.isInteger(item.chars) && item.chars >= 0 ? item.chars : 0;
           if (!item.id || chars === 0) return makeEntry('');
           const text = typeof item.text === 'string' && item.text.length === chars ? item.text : null;
-          return { id: item.id, chars, text, state: 'saved' };
+          // Entries saved before previews existed get one once loaded.
+          const preview = typeof item.preview === 'string' ? item.preview.slice(0, PREVIEW_CHARS) : previewOf(text ?? '');
+          return { id: item.id, chars, text, state: 'saved', preview };
         }
         return makeEntry(String(item ?? ''));
       });
