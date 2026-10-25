@@ -14,9 +14,11 @@ async function copyText(text, button) {
     const original = button.dataset.label || 'Copy';
     button.textContent = ok ? 'Copied' : 'Failed';
     button.disabled = true;
+    button.dataset.copied = '';
     setTimeout(() => {
       button.textContent = original;
       button.disabled = false;
+      delete button.dataset.copied;
     }, 1200);
   };
   try {
@@ -61,7 +63,8 @@ export function initEpochPopover() {
   const error = popover.querySelector('#epochError');
   const dateInput = popover.querySelector('#epochDateInput');
   const targetUnit = popover.querySelector('#epochTargetUnit');
-  const dateOutput = popover.querySelector('#epochDateOutput');
+  const heroDate = popover.querySelector('#epochHeroDate');
+  const heroTime = popover.querySelector('#epochHeroTime');
 
   // Every row that convert() can fill; cleared together on empty input or error.
   const OUTPUT_ROWS = ['utc', 'local', 'relative', 'unit-s', 'unit-ms', 'unit-us', 'unit-ns'];
@@ -89,6 +92,26 @@ export function initEpochPopover() {
       liveTimer = null;
     }
     paintLive();
+  };
+
+  // The headline: the moment as a person reads it, in their time zone.
+  const heroDateFormat = new Intl.DateTimeFormat(undefined, {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  });
+  const heroTimeFormat = new Intl.DateTimeFormat(undefined, {
+    hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'short',
+  });
+  const setHero = (result) => {
+    if (!heroDate) return;
+    if (!result) {
+      heroDate.textContent = '';
+      heroTime.textContent = 'Paste or type a Unix timestamp to see its date.';
+      heroTime.closest('.epoch-hero')?.classList.add('is-empty');
+      return;
+    }
+    heroDate.textContent = heroDateFormat.format(result.date);
+    heroTime.textContent = `${heroTimeFormat.format(result.date)} · ${result.relative}`;
+    heroTime.closest('.epoch-hero')?.classList.remove('is-empty');
   };
 
   const showError = (message) => {
@@ -120,25 +143,29 @@ export function initEpochPopover() {
       showError('');
       for (const name of OUTPUT_ROWS) setRow(name, '');
       detected.textContent = '';
+      setHero(null);
       return;
     }
     const auto = detectUnit(raw);
     const unit = unitSelect.value === 'auto' ? auto : unitSelect.value;
     detected.textContent = unit
-      ? `Detected: ${EPOCH_UNITS[unit].label.toLowerCase()}${unitSelect.value === 'auto' ? ' (auto)' : ''}`
+      ? `${EPOCH_UNITS[unit].label.toLowerCase()}${unitSelect.value === 'auto' ? ' · auto' : ''}`
       : '';
     if (!unit) {
       showError('Enter a numeric timestamp.');
       for (const name of OUTPUT_ROWS) setRow(name, '');
+      setHero(null);
       return;
     }
     const result = convertTimestamp(raw, unit);
     if (result.error) {
       showError(result.error);
       for (const name of OUTPUT_ROWS) setRow(name, '');
+      setHero(null);
       return;
     }
     showError('');
+    setHero(result);
     setRow('utc', result.utc);
     setRow('local', result.local);
     setRow('relative', result.relative);
