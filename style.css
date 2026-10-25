@@ -4,7 +4,9 @@
   font-family: var(--font-ui);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  color-scheme: dark;
+  /* "only": the browser must not recolor the page (Chrome's automatic
+     dark mode would otherwise darken the light theme into muddy greys). */
+  color-scheme: only dark;
 
   /* Surfaces, darkest to lightest: page, panel (reading surface), inset
      controls, toolbar band. Each step is visibly distinct. */
@@ -103,7 +105,7 @@
 }
 
 :root[data-theme="light"] {
-  color-scheme: light;
+  color-scheme: only light;
 
   --page-bg: #e4e8ef;
   --text: #111827;
@@ -355,7 +357,7 @@ button.danger:hover:not(:disabled) { color: var(--danger-text); border-color: va
 .inspector { flex: 0 1 300px; min-width: 280px; max-width: 380px; min-height: 0; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; padding-bottom: 2px; }
 :root:not([data-inspector="open"]) .inspector { display: none; }
 .inspector-card { flex: 0 0 auto; display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid var(--panel-border); border-radius: 14px; background: var(--panel-bg); box-shadow: var(--shadow); }
-.inspector-card:last-child { flex: 1 1 auto; min-height: 120px; }
+.inspector-card:last-child { flex: 1 1 0; min-height: 200px; overflow: hidden; }
 .inspector-card h2 { margin: 0; color: var(--heading); font-size: 13px; font-weight: 600; }
 .inspector-head { display: flex; align-items: center; gap: 10px; }
 .inspector-status { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
@@ -380,7 +382,8 @@ button.danger:hover:not(:disabled) { color: var(--danger-text); border-color: va
 .selection-value[data-type="object"], .selection-value[data-type="array"] { color: var(--syntax-muted); }
 .selection-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .selection-actions button { height: 32px; font-size: 12.5px; }
-.inspector-history { display: flex; flex-direction: column; gap: 2px; margin-top: -4px; }
+.inspector-history { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 2px; margin: -4px -6px 0; padding: 0 6px; overflow-y: auto; scrollbar-color: var(--scroll-thumb) transparent; }
+.inspector-history-item { flex: 0 0 auto; }
 .inspector-history-item { width: 100%; height: auto; min-height: 0; display: flex; align-items: center; gap: 12px; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--text); text-align: left; font-weight: 400; }
 .inspector-history-item:hover:not(:disabled) { border-color: transparent; background: var(--inset); }
 .inspector-history-item.is-current, .inspector-history-item.is-current:hover:not(:disabled) { background: var(--pressed-bg); }
@@ -417,6 +420,7 @@ button.danger:hover:not(:disabled) { color: var(--danger-text); border-color: va
   .workspace { flex-direction: column; overflow-y: auto; }
   .editor-frame { flex: 1 0 60vh; }
   .inspector { flex: 0 0 auto; max-width: none; min-width: 0; overflow: visible; }
+  .inspector-card:last-child { flex: 0 0 auto; max-height: 360px; }
 }
 @media (max-width: 820px) {
   .topbar { flex-wrap: wrap; padding: 8px 12px; row-gap: 6px; }

@@ -19,7 +19,7 @@
           }
         } catch (_) {}
         document.documentElement.dataset.theme = theme;
-        document.documentElement.style.colorScheme = theme;
+        document.documentElement.style.colorScheme = `only ${theme}`;
       })();
       (() => {
         let wrap = 'off';
@@ -40,7 +40,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" />
-    <link rel="stylesheet" href="./style.css?v=nocturne-v1" />
+    <link rel="stylesheet" href="./style.css?v=nocturne-v2" />
     <link rel="stylesheet" href="./tree-view.css?v=nocturne-v1" />
     <link rel="stylesheet" href="./text-editor.css?v=nocturne-v1" />
   </head>
@@ -288,7 +288,7 @@
       </footer>
     </main>
 
-    <script type="module" src="./app.js?v=nocturne-v1"></script>
+    <script type="module" src="./app.js?v=nocturne-v2"></script>
     <script type="module" src="./ui-controls.js?v=tree-actions-visible-v1"></script>
   </body>
 </html>

@@ -392,7 +392,8 @@ function currentTheme() {
 function applyTheme(theme, { persist = false } = {}) {
   const next = theme === 'light' ? 'light' : 'dark';
   root.dataset.theme = next;
-  root.style.colorScheme = next;
+  // "only" stops the browser's automatic dark mode from recoloring light.
+  root.style.colorScheme = `only ${next}`;
   updateThemeControl(next);
 
   if (persist) {

@@ -18,6 +18,12 @@ import {
 // measured timings. Anything DOM/layout stays a real-machine eyeball item.
 const html = await readFile(new URL('index.html', import.meta.url), 'utf8');
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// Waits for a condition instead of a fixed delay: navigating a multi-MB
+// history entry can take longer than a few ms on a slow CI runner.
+async function waitFor(check, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!check() && Date.now() < deadline) await sleep(10);
+}
 const MB = 1024 * 1024;
 
 function installGlobals(dom) {
@@ -342,11 +348,12 @@ function treeControllerFor(dom, payload, mode) {
   const back = doc.querySelector('#historyBackBtn');
   assert.equal(back.disabled, false, 'typed 9MB entry flushed on switch, not lost');
   back.click();
-  await sleep(50);
+  await waitFor(() => editor.value.length === nine.length);
   assert.equal(editor.value.length, nine.length, 'Back reaches the pre-edit 9MB entry');
   const forward = doc.querySelector('#historyForwardBtn');
+  await waitFor(() => !forward.disabled);
   forward.click();
-  await sleep(50);
+  await waitFor(() => editor.value.length === nine.length + 1);
   assert.equal(editor.value.length, nine.length + 1, 'Forward returns to the typed entry');
 }
 
