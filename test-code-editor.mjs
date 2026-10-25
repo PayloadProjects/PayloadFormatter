@@ -106,14 +106,18 @@ host.addEventListener('input', () => { inputs += 1; });
   assert.equal(host.wrap, 'soft');
   host.value = 'still wraps after a new payload';
   assert.ok(content().classList.contains('cm-lineWrapping'), 'wrap survives a value replacement');
-  // Hanging indent: each line carries its indentation (+2 columns) so the
-  // theme can line wrapped rows up under it instead of the left edge.
-  host.value = '{\n    "note": "long",\n\t\t"tabbed": 1,\nflat\n' + ' '.repeat(90) + 'deep\n}';
+  // Hanging indent: a `"key": value` line hangs under the start of its
+  // value (past a string's opening quote); other lines hang under their
+  // indentation (+2 columns). The theme turns --hang into the wrap offset.
+  host.value = '{\n    "note": "long",\n\t\t"tabbed": 1,\nflat\n' + ' '.repeat(90) + 'deep\n'
+    + `  "${'k'.repeat(70)}": "v"\n  "esc\\"aped": "x"\n}`;
   await sleep(20);
   const hangOf = (text) => [...host.querySelectorAll('.cm-line')]
     .find((line) => line.textContent.trim().startsWith(text))?.style.getPropertyValue('--hang');
-  assert.equal(hangOf('"note"'), '6ch', 'a 4-space line hangs at 6 columns');
-  assert.equal(hangOf('"tabbed"'), '6ch', 'tabs count as tab-size (2) columns');
+  assert.equal(hangOf('"note"'), '13ch', 'a string value hangs under its first character');
+  assert.equal(hangOf('"tabbed"'), '14ch', 'tabs count as tab-size (2) columns; numbers align too');
+  assert.equal(hangOf('"esc'), '16ch', 'escaped quotes inside the key are skipped');
+  assert.equal(hangOf('"kkk'), '4ch', 'a very long key falls back to indentation + 2');
   assert.equal(hangOf('flat'), '2ch', 'an unindented line still hangs 2 columns');
   assert.equal(hangOf('deep'), '42ch', 'very deep indentation is capped at 40 (+2) columns');
   host.wrap = 'off';

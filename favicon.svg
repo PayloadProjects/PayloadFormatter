@@ -1,45 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#173240"/>
-      <stop offset="100%" stop-color="#2a8eaa"/>
-    </linearGradient>
-  </defs>
-
-  <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#bg)" />
-  <rect
-    x="4"
-    y="4"
-    width="56"
-    height="56"
-    rx="14"
-    fill="none"
-    stroke="#4fb9d7"
-    stroke-width="2"
-    opacity="0.35"
-  />
-
-  <path
-    d="M24 21 L14 32 L24 43"
-    fill="none"
-    stroke="#eafcff"
-    stroke-width="4.5"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-  />
-  <path
-    d="M40 21 L50 32 L40 43"
-    fill="none"
-    stroke="#eafcff"
-    stroke-width="4.5"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-  />
-  <path
-    d="M35 18 L29 46"
-    fill="none"
-    stroke="#7fe0f4"
-    stroke-width="4"
-    stroke-linecap="round"
-  />
+  <!-- Nocturne brand mark: { } in a rounded square, as in the header. -->
+  <rect x="3" y="3" width="58" height="58" rx="15" fill="#151c2e" />
+  <rect x="3" y="3" width="58" height="58" rx="15" fill="none" stroke="#3d4f8c" stroke-width="2.5" />
+  <g fill="none" stroke="#8aa4ff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M27 16c-5 0-7 2-7 6v5c0 3-1.6 5-5.5 5 3.9 0 5.5 2 5.5 5v5c0 4 2 6 7 6" />
+    <path d="M37 16c5 0 7 2 7 6v5c0 3 1.6 5 5.5 5-3.9 0-5.5 2-5.5 5v5c0 4-2 6-7 6" />
+  </g>
 </svg>
