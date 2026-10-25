@@ -223,7 +223,9 @@ assert.ok(css.includes('.tree-hit-text'),
   'hit text has its own style rule');
 assert.ok(css.includes('.tree-hit .tree-hit-text'),
   'the current hit keeps a stronger tint');
-assert.ok(!css.includes('.tree-match > .tree-row') && !css.includes('.tree-hit > .tree-row'),
-  'no rule paints the whole row for a match anymore');
+assert.ok(!css.includes('.tree-match > .tree-row'),
+  'other matches highlight only their text, never the whole row');
+assert.match(css, /\.tree-hit > \.tree-row \{ background: var\(--tree-focus-bg\); \}/,
+  'the current hit row gets a light tint on top of its outlined text');
 
 console.log('All tree view regression tests passed.');

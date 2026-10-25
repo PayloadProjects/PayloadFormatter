@@ -7,8 +7,8 @@ const [html, css, editorCss, app, editorJs, treeCss, treeJs] = await Promise.all
 );
 
 // The Wrap control lives next to the payload type badge in the editor strip.
-// The strip-meta block nests the tree actions div, so capture through its close.
-const stripMeta = html.match(/<div class="editor-strip-meta"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/)?.[1];
+// The strip-meta block nests the tree actions div; the divider follows it.
+const stripMeta = html.match(/<div class="editor-strip-meta"[^>]*>([\s\S]*?)<\/div>\s*<span class="strip-divider"/)?.[1];
 assert.ok(stripMeta, 'editor strip meta exists');
 assert.deepEqual([...stripMeta.matchAll(/<(?:button|span)\b[^>]*id="([^"]+)"/g)].map((m) => m[1]),
   ['wrapToggleBtn', 'treeExpandAll', 'treeCollapseAll', 'typeBadge'],
@@ -74,28 +74,27 @@ assert.match(treeCss, /html\[data-wrap="on"\] \.tree-row > span \{\s*min-width: 
 assert.match(app, /treeController\.isTree\(\)/,
   'wrap tooltip adapts to the current view');
 
-// Compact chrome: the payload panel gets the space, chrome shrinks.
-assert.match(css, /\.shell \{[^}]*padding: 8px 12px 10px;[^}]*gap: 8px;/,
-  'shell padding and gap are compact');
-assert.match(css, /\.topbar \{ min-height: 28px;/, 'topbar is slimmer');
-assert.match(css, /\.brand-mark \{ width: 22px; height: 22px;/, 'brand mark is smaller');
-assert.match(css, /h1 \{[^}]*font-size: 15px;/, 'heading is smaller');
-assert.match(css, /\.editor-strip \{ min-height: 28px;[^}]*padding: 2px 10px;/,
-  'editor strip is slimmer');
-assert.match(css, /\.toolbar \{ min-height: 28px;[^}]*padding: 2px 10px;/,
-  'toolbar matches the strip');
-assert.match(treeCss, /\.tree-search \{[^}]*height: 24px;/,
-  'tree search input matches the slimmer strip');
+// Slim chrome (Nocturne): one ~40px toolbar row with 28px controls and 22px
+// segments; the user rejected a taller toolbar.
+assert.match(css, /\.topbar \{ min-height: 54px;[^}]*padding: 10px 20px;/, 'header row');
+assert.match(css, /\.brand-mark \{ width: 28px; height: 28px;/, 'brand mark size');
+assert.match(css, /h1 \{[^}]*font-size: 15px;/, 'heading size');
+assert.match(css, /\.editor-strip \{ min-height: 40px;[^}]*padding: 5px 10px;/,
+  'toolbar row stays slim');
+assert.match(css, /button \{ min-height: 28px;/, 'toolbar controls are 28px');
+assert.match(treeCss, /\.view-toggle button \{[^}]*height: 22px;/, 'view switch segments are 22px');
+assert.match(editorCss, /\.strip-search \{[^}]*height: 28px;/,
+  'search box matches the 28px controls');
 // Editor padding stays compact (12px around the text).
 assert.match(editorJs, /'\.cm-content': \{ padding: '12px 0'/, 'editor content has compact vertical padding');
 assert.match(editorJs, /'\.cm-line': \{ padding: '0 12px' \}/, 'editor lines have compact horizontal padding');
 
 // Cache-busted asset versions cover every touched file.
 for (const [asset, version] of [
-  ['style.css', 'codemirror-v1'],
-  ['app.js', 'codemirror-v1'],
-  ['text-editor.css', 'codemirror-v1'],
-  ['tree-view.css', 'wrap-compact-v1'],
+  ['style.css', 'nocturne-v1'],
+  ['app.js', 'nocturne-v1'],
+  ['text-editor.css', 'nocturne-v1'],
+  ['tree-view.css', 'nocturne-v1'],
 ]) {
   assert.match(html, new RegExp(`\\./${asset.replace('.', '\\.')}\\?v=${version}`),
     `${asset} carries the new cache-busting version`);
@@ -115,7 +114,7 @@ assert.match(treeCss, /\.editor-frame\[data-view="tree"\] \[data-view-scope="tex
   'text-only controls hide in tree view');
 assert.match(treeCss, /\.editor-frame:not\(\[data-view="tree"\]\) \[data-view-scope="tree"\]/,
   'tree-only controls hide in text view');
-assert.match(treeCss, /\.tree-strip-search \{[^}]*flex: 1 1 200px;/,
+assert.match(treeCss, /\.tree-strip-search \{[^}]*flex: 1 1 140px;/,
   'tree search grows inside the single strip');
 
 console.log('All word-wrap and compact-chrome regression tests passed.');

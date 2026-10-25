@@ -128,8 +128,8 @@ host.addEventListener('input', () => { inputs += 1; });
   assert.ok(classesOf('"name"').includes('syntax-key'), 'JSON keys are highlighted');
   assert.ok(classesOf('"A"').includes('syntax-string'), 'JSON strings are highlighted');
   assert.ok(classesOf('-1.5').includes('syntax-number'), 'JSON numbers are highlighted');
-  assert.ok(classesOf('true').includes('syntax-boolean') && classesOf('null').includes('syntax-boolean'),
-    'JSON literals are highlighted');
+  assert.ok(classesOf('true').includes('syntax-boolean'), 'JSON booleans are highlighted');
+  assert.ok(classesOf('null').includes('syntax-null'), 'JSON null has its own color');
 
   editor.refresh('xml');
   host.value = '<root id="1"><!-- c --><name>x &amp; y</name></root>';
@@ -279,7 +279,7 @@ host.addEventListener('input', () => { inputs += 1; });
   const box = doc.querySelector('#textSearch');
   const count = doc.querySelector('#textMatchCount');
   const strip = html.match(/<div class="editor-strip"[^>]*>([\s\S]*?)<\/div>\s*<div class="editor-body"/)?.[1];
-  assert.match(strip, /<div class="text-strip-search" data-view-scope="text"/, 'the text search box lives in the strip, text view only');
+  assert.match(strip, /<div class="text-strip-search[^"]*" data-view-scope="text"/, 'the text search box lives in the strip, text view only');
   assert.equal(doc.querySelector('#textPrev').disabled, true, 'arrows start disabled');
 
   appHost.value = '{"name":"user1","friend":"user2","note":"USER3"}';

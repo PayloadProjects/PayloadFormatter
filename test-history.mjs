@@ -217,7 +217,7 @@ const [html, css, app, managerJs, build, pkg] = await Promise.all(
 
 // --- Wiring: history nav lives in the toolbar, before the action group ---
 {
-  const toolbar = html.match(/<div class="toolbar">([\s\S]*?)<div class="status-area">/)?.[1];
+  const toolbar = html.match(/<div class="editor-strip"[^>]*>([\s\S]*?)<div id="largeNotice"/)?.[1];
   assert.ok(toolbar, 'toolbar exists');
   const navIndex = toolbar.indexOf('class="history-nav"');
   const actionsIndex = toolbar.indexOf('class="actions"');
@@ -232,10 +232,10 @@ const [html, css, app, managerJs, build, pkg] = await Promise.all(
   assert.ok(/id="historyBackBtn"[^>]*><svg/.test(toolbar), 'back uses the circular-arrow icon');
   assert.ok(/id="historyForwardBtn"[^>]*><svg/.test(toolbar), 'forward uses the circular-arrow icon');
 
-  // The strict Clear -> Paste & Format -> Copy order inside .actions is untouched.
+  // The Clear -> Copy -> Paste and format order inside .actions.
   const actions = html.match(/<div class="actions"[^>]*>([\s\S]*?)<\/div>/)?.[1];
   const order = [...actions.matchAll(/id="(.*?)"/g)].map((m) => m[1]);
-  assert.deepEqual(order, ['clearBtn', 'pasteFormatBtn', 'copyBtn']);
+  assert.deepEqual(order, ['clearBtn', 'copyBtn', 'pasteFormatBtn']);
 }
 
 // --- Wiring: app.js records pastes, edits, clears and navigates ---

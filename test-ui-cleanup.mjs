@@ -11,12 +11,12 @@ const [html, css, treeCss, ui, build, controllerSource, editorJs] = await Promis
 const actions = html.match(/<div class="actions"[^>]*>([\s\S]*?)<\/div>/)?.[1];
 assert.ok(actions, 'formatting actions exist');
 assert.deepEqual([...actions.matchAll(/<button\b[^>]*id="([^"]+)"/g)].map((m) => m[1]),
-  ['clearBtn', 'pasteFormatBtn', 'copyBtn']);
+  ['clearBtn', 'copyBtn', 'pasteFormatBtn']);
 assert.doesNotMatch(css, /(?:row|column)-reverse|(?:^|[;{])\s*order\s*:/,
   'CSS must not visually move Clear out of its original first position');
-assert.match(css, /grid-template-columns:\s*auto minmax\(0, 1fr\) auto/,
+assert.match(css, /grid-template-columns:\s*auto auto minmax\(0, 1fr\)/,
   'mobile keeps all three actions in the same order');
-assert.ok(html.indexOf('class="editor-body"') < html.indexOf('class="toolbar"'));
+assert.ok(html.indexOf('class="editor-body"') < html.indexOf('class="statusbar"'));
 assert.ok(!html.includes('brand-subtitle') && !html.includes('workspace-note'));
 assert.equal((html.match(/Local only/g) || []).length, 1);
 assert.ok(html.includes('id="editorHelp"') && editorJs.includes("'aria-describedby': 'editorHelp'"),
@@ -28,13 +28,12 @@ assert.ok(treeCss.includes('background: var(--selected-bg)'));
 assert.ok(treeCss.includes('color: var(--heading)'));
 assert.ok(css.includes('prefers-reduced-motion'));
 
-// The action buttons are pinned left beside the history nav: the toolbar
-// must not center them (space-between), or a changing status message on
-// the right would shift them around.
-assert.match(css, /\.toolbar \{[^}]*justify-content: flex-start;/,
-  'toolbar pins its groups left instead of centering the actions');
-assert.match(css, /\.status-area \{[^}]*margin-left: auto;/,
-  'status area holds the right edge so the buttons never move');
+// The status bar keeps the status message on the left and the metrics on
+// the right, so a changing message never shifts the metrics around.
+assert.match(css, /\.statusbar \{[^}]*justify-content: flex-start;/,
+  'status bar pins the status message left');
+assert.match(css, /\.status-meta \{[^}]*margin-left: auto;/,
+  'metrics hold the right edge');
 
 // Frequent actions are ordinary visible toolbar buttons, never a disclosure.
 const treeActions = html.match(/<div class="tree-actions"[^>]*>([\s\S]*?)<\/div>/)?.[1];

@@ -39,12 +39,14 @@ assert.ok(packageJson.scripts.test.includes('test-theme.mjs'));
 const clearIndex = html.indexOf('id="clearBtn"');
 const pasteFormatIndex = html.indexOf('id="pasteFormatBtn"');
 const copyIndex = html.indexOf('id="copyBtn"');
-assert.ok(clearIndex < pasteFormatIndex && pasteFormatIndex < copyIndex,
-  'compact action order must remain Clear → Paste & Format → Copy');
+assert.ok(clearIndex < copyIndex && copyIndex < pasteFormatIndex,
+  'Nocturne action order: Clear → Copy → primary Paste and format, last in the toolbar');
 assert.ok(!html.includes('id="pasteBtn"') && !html.includes('id="formatBtn"'),
   'separate Paste and Format buttons must not return');
-assert.ok(html.indexOf('id="payloadInput"') < html.indexOf('class="toolbar"'),
-  'compact layout must keep the action bar below the editor');
+assert.ok(html.indexOf('class="editor-strip"') < html.indexOf('id="payloadInput"'),
+  'the actions live in the toolbar row above the editor');
+assert.ok(html.indexOf('id="payloadInput"') < html.indexOf('class="statusbar"'),
+  'the status bar sits below the editor card');
 assert.ok(css.includes('height: 100dvh'), 'app shell should be constrained to the dynamic viewport height');
 assert.ok(css.includes('overflow: hidden'), 'page-level overflow should be contained');
 assert.match(textCss, /\.text-editor \.cm-editor \{[^}]*flex: 1;[^}]*min-height: 0;/,

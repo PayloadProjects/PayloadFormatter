@@ -18,6 +18,7 @@ import {
   syntaxHighlighting,
   HighlightStyle,
   bracketMatching,
+  syntaxTree,
   json,
   xml,
   search,
@@ -47,7 +48,8 @@ const highlightStyle = HighlightStyle.define([
   { tag: tags.propertyName, class: 'syntax-key' },
   { tag: [tags.string, tags.attributeValue], class: 'syntax-string' },
   { tag: tags.number, class: 'syntax-number' },
-  { tag: [tags.bool, tags.null, tags.keyword], class: 'syntax-boolean' },
+  { tag: tags.null, class: 'syntax-null' },
+  { tag: [tags.bool, tags.keyword], class: 'syntax-boolean' },
   { tag: [tags.tagName, tags.standard(tags.tagName)], class: 'syntax-tag' },
   { tag: tags.attributeName, class: 'syntax-attribute' },
   { tag: tags.character, class: 'syntax-entity' },
@@ -71,17 +73,17 @@ const editorTheme = EditorView.theme({
   '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--editor-caret)' },
   '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection':
     { backgroundColor: 'var(--code-selection-bg)' },
-  '.cm-activeLine': { backgroundColor: 'var(--tree-hover-bg)' },
+  '.cm-activeLine': { backgroundColor: 'var(--active-line)' },
   '.cm-gutters': {
     backgroundColor: 'var(--editor-bg)',
     color: 'var(--syntax-muted)',
-    borderRight: '1px solid var(--guide)',
+    borderRight: '0',
   },
-  '.cm-activeLineGutter': { backgroundColor: 'transparent', color: 'var(--editor-text)' },
-  '.cm-lineNumbers .cm-gutterElement': { padding: '0 8px 0 12px' },
+  '.cm-activeLineGutter': { backgroundColor: 'var(--active-line)', color: 'var(--editor-text)' },
+  '.cm-lineNumbers .cm-gutterElement': { minWidth: '44px', padding: '0 12px 0 12px' },
   '.cm-selectionMatch': { backgroundColor: 'var(--tree-match-bg)' },
-  '.cm-searchMatch': { backgroundColor: 'var(--tree-match-bg)', outline: '1px solid var(--tree-hit-border)' },
-  '.cm-searchMatch.cm-searchMatch-selected': { backgroundColor: 'var(--tree-hit-bg)' },
+  '.cm-searchMatch': { backgroundColor: 'var(--tree-match-bg)', borderRadius: '3px' },
+  '.cm-searchMatch.cm-searchMatch-selected': { backgroundColor: 'var(--tree-hit-bg)', outline: '1px solid var(--tree-hit-border)' },
   '&.cm-focused .cm-matchingBracket': { backgroundColor: 'var(--tree-match-bg)', outline: '1px solid var(--guide)' },
 });
 
@@ -177,6 +179,90 @@ const hangingIndent = ViewPlugin.fromClass(class {
 
 const wrapExtension = [EditorView.lineWrapping, hangingIndent];
 
+// What the cursor sits on, read from the parser's syntax tree (only the
+// part already parsed, so this never parses the whole document):
+// { kind, segments, node } where segments are { key } / { index } for JSON
+// and { tag } for XML, outermost first. Feeds the path bar and inspector.
+const JSON_VALUES = new Set(['Object', 'Array', 'String', 'Number', 'True', 'False', 'Null']);
+const JSON_TYPES = { Object: 'object', Array: 'array', String: 'string', Number: 'number', True: 'boolean', False: 'boolean', Null: 'null' };
+
+function decodeKey(text) {
+  try { return String(JSON.parse(text)); } catch (_) { return text.replace(/^"|"$/g, ''); }
+}
+
+function jsonValueChildren(node, limit = Infinity) {
+  let count = 0;
+  for (let child = node.firstChild; child && count < limit; child = child.nextSibling) {
+    if (JSON_VALUES.has(child.name) || child.name === 'Property') count += 1;
+  }
+  return count;
+}
+
+function jsonSelection(state, pos) {
+  let inner = syntaxTree(state).resolveInner(pos, -1);
+  // Between tokens: prefer the value the cursor touches on the right.
+  if (!JSON_VALUES.has(inner.name) && inner.name !== 'PropertyName') {
+    const right = syntaxTree(state).resolveInner(pos, 1);
+    if (JSON_VALUES.has(right.name) || right.name === 'PropertyName') inner = right;
+  }
+  const segments = [];
+  let target = null;
+  let prev = null;
+  for (let node = inner; node; prev = node, node = node.parent) {
+    if (node.name === 'Property') {
+      const name = node.getChild('PropertyName');
+      if (name) segments.push({ key: decodeKey(state.sliceDoc(name.from, name.to)) });
+      if (!target) {
+        for (let child = node.lastChild; child; child = child.prevSibling) {
+          if (JSON_VALUES.has(child.name)) { target = child; break; }
+        }
+      }
+    } else if (node.name === 'Array' && prev && JSON_VALUES.has(prev.name)) {
+      let index = 0;
+      for (let child = node.firstChild; child && child.from < prev.from; child = child.nextSibling) {
+        if (JSON_VALUES.has(child.name)) index += 1;
+      }
+      segments.push({ index });
+      if (!target) target = prev;
+    }
+  }
+  if (!target && JSON_VALUES.has(inner.name)) target = inner;
+  segments.reverse();
+  if (!target) return { kind: 'json', segments, type: null };
+  const type = JSON_TYPES[target.name];
+  const raw = type === 'object' || type === 'array' ? null : state.sliceDoc(target.from, target.to);
+  return {
+    kind: 'json',
+    segments,
+    type,
+    count: raw === null ? jsonValueChildren(target) : 0,
+    raw,
+    // Full source of the value (containers too), read only when copied.
+    source: () => state.sliceDoc(target.from, target.to),
+  };
+}
+
+function xmlSelection(state, pos) {
+  const segments = [];
+  let element = null;
+  for (let node = syntaxTree(state).resolveInner(pos, -1); node; node = node.parent) {
+    if (node.name !== 'Element') continue;
+    const open = node.getChild('OpenTag') || node.getChild('SelfClosingTag');
+    const name = open?.getChild('TagName');
+    if (name) segments.push({ tag: state.sliceDoc(name.from, name.to) });
+    if (!element) element = node;
+  }
+  segments.reverse();
+  return {
+    kind: 'xml',
+    segments,
+    type: element ? 'element' : null,
+    count: 0,
+    raw: null,
+    source: () => (element ? state.sliceDoc(element.from, element.to) : ''),
+  };
+}
+
 function languageFor(mode) {
   if (mode === 'json') return json();
   if (mode === 'xml') return xml();
@@ -201,6 +287,7 @@ export function createSyntaxEditor(host) {
   let searchText = '';
   const changeListeners = new Set();
   const findListeners = new Set();
+  const cursorListeners = new Set();
   const notifyChange = () => { for (const listener of changeListeners) listener(); };
 
   function extensions() {
@@ -240,6 +327,12 @@ export function createSyntaxEditor(host) {
         autocapitalize: 'off',
       }),
       EditorView.updateListener.of((update) => {
+        // The parser works in slices; a finished slice can change what the
+        // cursor sits on, so it counts as a cursor update too.
+        if (update.selectionSet || update.docChanged
+            || syntaxTree(update.state) !== syntaxTree(update.startState)) {
+          for (const listener of cursorListeners) listener();
+        }
         if (!update.docChanged) return;
         syncEmpty();
         host.dispatchEvent(new Event('input', { bubbles: true }));
@@ -353,6 +446,21 @@ export function createSyntaxEditor(host) {
 
   return {
     view,
+    // { line, col } of the main cursor (1-based), for the status bar.
+    cursor() {
+      const head = view.state.selection.main.head;
+      const line = view.state.doc.lineAt(head);
+      return { line: line.number, col: head - line.from + 1 };
+    },
+    // Called after the cursor moves or the document changes.
+    onCursor(listener) { cursorListeners.add(listener); },
+    // The path and value under the cursor, or null without a known mode.
+    selection() {
+      const pos = view.state.selection.main.head;
+      if (mode === 'json') return jsonSelection(view.state, pos);
+      if (mode === 'xml') return xmlSelection(view.state, pos);
+      return null;
+    },
     // Switches the grammar when the detected payload type changes. Called on
     // every UI refresh, so an unchanged mode is a no-op.
     refresh(nextMode = mode) {

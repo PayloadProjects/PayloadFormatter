@@ -9,7 +9,7 @@ const MAX_TREE_CHARS = 10 * 1024 * 1024;
 // Connects the Text/Tree toggle, the tree toolbar and the tree itself to the
 // rest of the app. app.js supplies the payload and the formatter; this module
 // never reads the editor directly, so large-payload mode keeps working.
-export function createTreeController({ getText, detectMode, setStatus, nextPaint, onFormat, onPasteText, onTreeHide, getTreeRestore }) {
+export function createTreeController({ getText, detectMode, setStatus, nextPaint, onFormat, onPasteText, onTreeHide, getTreeRestore, onSelect, onViewChange }) {
   const frame = document.querySelector('#editorFrame');
   const textBtn = document.querySelector('#viewTextBtn');
   const treeBtn = document.querySelector('#viewTreeBtn');
@@ -25,7 +25,7 @@ export function createTreeController({ getText, detectMode, setStatus, nextPaint
     return { refresh: async () => {}, isTree: () => false, setView: () => {}, openPaths: () => [] };
   }
 
-  const tree = createTreeView(container, { onCopyPath: copyPath });
+  const tree = createTreeView(container, { onCopyPath: copyPath, onSelect });
   let view = readStoredView();
   let token = 0;
   let searchTimer = 0;
@@ -130,6 +130,7 @@ export function createTreeController({ getText, detectMode, setStatus, nextPaint
     if (view === 'tree' && next !== 'tree') onTreeHide?.();
     view = next;
     applyView();
+    onViewChange?.(view);
     try { sessionStorage.setItem(VIEW_STORAGE_KEY, view); } catch (_) {}
     if (view === 'tree') refresh(getTreeRestore?.());
   }
@@ -162,8 +163,10 @@ export function createTreeController({ getText, detectMode, setStatus, nextPaint
     // way out (Text view handles any size).
     if (text.length >= MAX_TREE_CHARS) {
       tree.clear(
-        `Tree view supports payloads up to ${(MAX_TREE_CHARS / 1048576).toFixed(0)} MB — ` +
-        `this one is ${(text.length / 1048576).toFixed(1)} MB. Use Text view for large payloads.`,
+        `Tree view works up to ${(MAX_TREE_CHARS / 1048576).toFixed(0)} MB`,
+        `This payload is ${(text.length / 1048576).toFixed(1)} MB. ` +
+        'Use Text view to read it, or search to jump straight to what you need.',
+        { label: 'Back to Text view', run: () => setView('text') },
       );
       setTools(false);
       showCount(null, '');

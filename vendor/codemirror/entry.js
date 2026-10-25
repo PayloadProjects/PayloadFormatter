@@ -15,7 +15,7 @@ export {
   Decoration,
 } from '@codemirror/view';
 export { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
-export { syntaxHighlighting, HighlightStyle, bracketMatching } from '@codemirror/language';
+export { syntaxHighlighting, HighlightStyle, bracketMatching, syntaxTree } from '@codemirror/language';
 export { json } from '@codemirror/lang-json';
 export { xml } from '@codemirror/lang-xml';
 export {
