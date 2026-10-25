@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
-import { shimLayout } from './test-support.mjs';
+import { shimLayout, settleAfter } from './test-support.mjs';
 
 // The text view is CodeMirror 6 (text-editor.js). These tests drive the
 // real editor in jsdom: the textarea-shaped host contract the app relies
@@ -266,7 +266,7 @@ host.addEventListener('input', () => { inputs += 1; });
   const back = doc.querySelector('#historyBackBtn');
   assert.equal(back.disabled, false, 'the editor paste is recorded as its own history entry');
   back.click();
-  await sleep(100);
+  await settleAfter(back, 100);
   assert.equal(appHost.readOnly, true, 'Back returns to the large payload (as its read-only preview)');
   assert.ok(appHost.value.startsWith('{"pad":"xxx') && appHost.value.includes('more chars not shown'),
     'the preview shows the start of the large payload');

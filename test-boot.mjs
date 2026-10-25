@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { shimLayout } from './test-support.mjs';
+import { shimLayout, settleAfter } from './test-support.mjs';
 import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
 
@@ -76,11 +76,11 @@ assert.equal(editor.value, '', 'clear empties the editor');
 await nativePaste('{"b":2}');
 assert.equal(q('#historyBackBtn').disabled, false, 'clear then paste: back enables');
 q('#historyBackBtn').click();
-await sleep(50);
+await settleAfter(q('#historyBackBtn'), 50);
 assert.equal(editor.value, '{"a":1}', 'back skips the clear state and restores paste A');
 assert.equal(q('#statusText').textContent, 'Restored previous payload.');
 q('#historyForwardBtn').click();
-await sleep(50);
+await settleAfter(q('#historyForwardBtn'), 50);
 assert.equal(editor.value, '{"b":2}', 'forward restores paste B');
 
 // --- Window flow: new window, switch, rename ---
@@ -96,11 +96,11 @@ assert.equal(editor.value, '', 'the new window starts empty');
 
 await nativePaste('{"x":9}');
 tabs()[0].click();
-await sleep(50);
+await settleAfter(tabs()[0], 50);
 assert.equal(editor.value, '{"b":2}', 'switching tabs restores that window’s payload');
 assert.ok(tabs()[0].classList.contains('is-active'), 'tab active state follows');
 tabs()[1].click();
-await sleep(50);
+await settleAfter(tabs()[1], 50);
 assert.equal(editor.value, '{"x":9}', 'switching back restores the second payload');
 
 const firstTab = tabs()[0];

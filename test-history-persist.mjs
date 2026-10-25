@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { shimLayout } from './test-support.mjs';
+import { shimLayout, settleAfter } from './test-support.mjs';
 import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
 import { createPayloadHistory } from './payload-history.js';
@@ -401,7 +401,7 @@ for (let i = 2; i <= 5; i += 1) {
 
 // Window 1's ten datasets are intact and isolated from window 2.
 tabsB()[0].click();
-await sleep(50);
+await settleAfter(tabsB()[0], 50);
 assert.equal(editorB.value, '{"w1":10}', 'window 1 shows its latest dataset');
 for (let i = 9; i >= 1; i -= 1) {
   backB.click();
@@ -426,7 +426,7 @@ for (const text of ['{"p":1}', '{"p":2}', '{"p":3}']) {
   await ctrlVPaste(domC, editorC, text);
 }
 docC.querySelector('#historyBackBtn').click(); // viewing {"p":2}
-await sleep(50);
+await settleAfter(docC.querySelector('#historyBackBtn'), 50);
 assert.equal(editorC.value, '{"p":2}');
 await appC.__flushHistorySaves();
 const snapshotC = snapshotStorage();
@@ -531,7 +531,7 @@ __clearMemoryBackend();
     await appG.__flushHistorySaves();
     assert.equal(editorG.value, '{"b":2}', 'pasting still works when storage fails');
     docG.querySelector('#historyBackBtn').click();
-    await sleep(30);
+    await settleAfter(docG.querySelector('#historyBackBtn'), 30);
     assert.equal(editorG.value, '{"a":1}', 'in-session history still works when storage fails');
   } finally {
     __useTestBackend(null);
@@ -564,21 +564,21 @@ __clearMemoryBackend();
   const tabs = [...doc.querySelectorAll('.window-tab')];
   const w2Id = tabs[1].dataset.windowId;
   tabs[0].click();
-  await sleep(50);
+  await settleAfter(tabs[0], 50);
   const back = doc.querySelector('#historyBackBtn');
   const forward = doc.querySelector('#historyForwardBtn');
   assert.equal(back.disabled, false, 'history survives the fast switch');
   back.click();
-  await sleep(50);
+  await settleAfter(back, 50);
   assert.equal(editor.value, '{"b":2}', 'back steps to the pre-edit entry');
   back.click();
-  await sleep(50);
+  await settleAfter(back, 50);
   assert.equal(editor.value, '{"a":1}', 'back again reaches the first payload');
   forward.click();
-  await sleep(50);
+  await settleAfter(forward, 50);
   assert.equal(editor.value, '{"b":2}', 'forward steps back through the edits');
   forward.click();
-  await sleep(50);
+  await settleAfter(forward, 50);
   assert.equal(
     editor.value,
     '{"b":2,"typed":true}',
@@ -719,10 +719,10 @@ __clearMemoryBackend();
 
   // Back loads the released payload from storage.
   doc.querySelector('#historyBackBtn').click();
-  await sleep(100);
+  await settleAfter(doc.querySelector('#historyBackBtn'), 100);
   assert.equal(editor.value, payload(3, 3), 'Back restores a cleared payload from storage');
   doc.querySelector('#historyBackBtn').click();
-  await sleep(100);
+  await settleAfter(doc.querySelector('#historyBackBtn'), 100);
   assert.equal(editor.value, payload(3, 2), 'Back keeps walking stored payloads');
   await app.__flushHistorySaves();
   assert.ok(
@@ -732,9 +732,9 @@ __clearMemoryBackend();
 
   // A window that is neither active nor recent loads from storage.
   tabs()[0].click();
-  await sleep(100);
+  await settleAfter(tabs()[0], 100);
   doc.querySelector('#historyBackBtn').click();
-  await sleep(100);
+  await settleAfter(doc.querySelector('#historyBackBtn'), 100);
   assert.equal(editor.value, payload(1, 3), "an inactive window's history loads on demand");
   await app.__flushHistorySaves();
   assert.ok(
@@ -758,9 +758,9 @@ __clearMemoryBackend();
   );
   const tabsR = [...docR.querySelectorAll('.window-tab')];
   tabsR[1].click();
-  await sleep(100);
+  await settleAfter(tabsR[1], 100);
   docR.querySelector('#historyBackBtn').click();
-  await sleep(100);
+  await settleAfter(docR.querySelector('#historyBackBtn'), 100);
   assert.equal(editorR.value, payload(2, 3), "other windows' history is intact after refresh");
 }
 __clearMemoryBackend();
@@ -795,10 +795,10 @@ __clearMemoryBackend();
   for (const text of ['{"later":4}']) await ctrlVPaste(dom, editor, text);
   await app.__flushHistorySaves();
   doc.querySelector('#historyBackBtn').click();
-  await sleep(50);
+  await settleAfter(doc.querySelector('#historyBackBtn'), 50);
   assert.equal(editor.value, '{"now":3}');
   doc.querySelector('#historyBackBtn').click();
-  await sleep(100);
+  await settleAfter(doc.querySelector('#historyBackBtn'), 100);
   assert.equal(editor.value, '{"keep":1}', 'Back skips a payload that was evicted from storage');
 }
 __clearMemoryBackend();

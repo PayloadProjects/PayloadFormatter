@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { shimLayout } from './test-support.mjs';
+import { shimLayout, settleAfter } from './test-support.mjs';
 import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
 import {
@@ -205,16 +205,16 @@ import { createWindowManager } from './window-manager.js';
   await sleep(450); // the debounce would have fired by now
 
   doc.querySelector('#historyBackBtn').click();
-  await sleep(50);
+  await settleAfter(doc.querySelector('#historyBackBtn'), 50);
   assert.equal(editor.value, '{"c":3}', 'back steps to the pre-edit entry');
   doc.querySelector('#historyBackBtn').click();
-  await sleep(50);
+  await settleAfter(doc.querySelector('#historyBackBtn'), 50);
   assert.equal(editor.value, '{"a":1}', 'back again reaches the first payload');
   doc.querySelector('#historyForwardBtn').click();
-  await sleep(50);
+  await settleAfter(doc.querySelector('#historyForwardBtn'), 50);
   assert.equal(editor.value, '{"c":3}', 'forward steps back through the edits');
   doc.querySelector('#historyForwardBtn').click();
-  await sleep(50);
+  await settleAfter(doc.querySelector('#historyForwardBtn'), 50);
   assert.equal(
     editor.value,
     '{"c":3,"d":1}',
@@ -302,8 +302,8 @@ import { createWindowManager } from './window-manager.js';
   };
   const back = doc.querySelector('#historyBackBtn');
   const forward = doc.querySelector('#historyForwardBtn');
-  const goBack = async () => { back.click(); await sleep(50); };
-  const goForward = async () => { forward.click(); await sleep(50); };
+  const goBack = async () => { back.click(); await settleAfter(back, 50); };
+  const goForward = async () => { forward.click(); await settleAfter(forward, 50); };
 
   await pasteText('{"a":1}');
   await pasteText('{"b":1}');
