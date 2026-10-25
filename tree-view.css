@@ -141,27 +141,44 @@
 
 /* Word wrap for tree rows, driven by the shared Wrap toggle
    (documentElement[data-wrap], same preference as text view). Rows become
-   multi-line and stay within the panel width instead of scrolling
-   horizontally; continuation lines align under the row start. flex-wrap is
-   the actual wrapping mechanism: without it the flex container keeps every
-   token-span on one line and shrink + overflow-wrap shreds their text into
-   unreadable columns. The span rules below only handle over-long single
-   tokens (URLs, base64) once items flow onto their own lines. */
+   ordinary flowing text: a long value starts right after its `"key":` and
+   wraps like a paragraph, staying within the panel width. (As flex items,
+   each token-span would jump to its own line whenever it did not fit beside
+   the key.) The span rule below only breaks over-long single tokens (URLs,
+   base64) that would not fit on a line at all. */
 html[data-wrap="on"] .tree-row {
+  display: block;
   width: auto;
   white-space: normal;
-  flex-wrap: wrap;
   /* Hanging indent: wrapped continuation lines start under the content
      (past the 20px toggle), not at the row's left edge. The toggle is
      pulled back into the added padding so the first line doesn't shift. */
   padding-left: calc(var(--row-pad, 6px) + 20px);
 }
+/* Floated into the indent (zero net width), so it adds no line-break
+   opportunity: an unbreakable value like a URL still starts on the key's
+   line and wraps from there instead of leaving that line empty. */
 html[data-wrap="on"] .tree-row > .tree-toggle {
+  float: left;
   margin-left: -20px;
+  line-height: 22px;
 }
 html[data-wrap="on"] .tree-row > span {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+/* Flowing rows: Copy path sits right after the value instead of
+   covering wrapped text. */
+html[data-wrap="on"] .tree-row > .tree-copy {
+  position: static;
+  display: inline-block;
+  margin-left: 8px;
+  vertical-align: 1px;
+}
+/* Expanded strings flow with the rest of the row. */
+html[data-wrap="on"] .tree-long.expanded {
+  display: inline;
+  max-width: none;
 }
 
 .tree-row:focus-visible {
@@ -241,15 +258,40 @@ html[data-wrap="on"] .tree-row > span {
 
 .tree-long {
   cursor: pointer;
-  border-bottom: 1px dotted var(--muted);
+}
+
+/* Shortened strings end in a small "Show all" label (click the string to
+   toggle); expanded ones offer "Show less". Generated content, so it is
+   never copied or matched by search. */
+.tree-long::after {
+  content: "Show all";
+  display: inline-block;
+  margin-left: 8px;
+  padding: 0 6px;
+  border: 1px solid var(--button-border);
+  border-radius: 5px;
+  background: var(--inset);
+  color: var(--accent-text);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+
+.tree-long.expanded::after {
+  content: "Show less";
+}
+
+.tree-long:hover::after {
+  border-color: var(--accent);
 }
 
 .tree-long.expanded {
   display: inline-block;
   max-width: min(100ch, 80vw);
   white-space: pre-wrap;
-  word-break: break-all;
-  border-bottom: 0;
+  overflow-wrap: anywhere;
 }
 
 .tree-copy {

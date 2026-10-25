@@ -59,11 +59,11 @@ assert.match(css, /\.strip-btn\[aria-pressed="true"\]/,
 // what lets flex items actually shrink so their text can wrap.
 assert.doesNotMatch(stripMeta, /id="wrapToggleBtn"[^>]*data-view-scope/,
   'wrap toggle is not scoped to text view anymore');
-assert.match(treeCss, /html\[data-wrap="on"\] \.tree-row \{\s*width: auto;\s*white-space: normal;\s*flex-wrap: wrap;/,
-  'wrapped tree rows stay within the panel width');
+assert.match(treeCss, /html\[data-wrap="on"\] \.tree-row \{\s*display: block;\s*width: auto;\s*white-space: normal;/,
+  'wrapped tree rows flow as text, so a long value continues on its key\'s line');
 assert.match(treeCss, /html\[data-wrap="on"\] \.tree-row \{\s*[^}]*padding-left: calc\(var\(--row-pad, 6px\) \+ 20px\);/,
   'wrapped rows get a hanging indent past the toggle');
-assert.match(treeCss, /html\[data-wrap="on"\] \.tree-row > \.tree-toggle \{\s*margin-left: -20px;/,
+assert.match(treeCss, /html\[data-wrap="on"\] \.tree-row > \.tree-toggle \{\s*float: left;\s*margin-left: -20px;/,
   'wrapped toggle is pulled back so the first line does not shift');
 assert.match(treeCss, /\.tree-row \{\s*[^}]*padding-left: var\(--row-pad, 6px\);/,
   'row indentation comes from the --row-pad variable');
@@ -94,7 +94,7 @@ for (const [asset, version] of [
   ['style.css', 'nocturne-v2'],
   ['app.js', 'nocturne-v2'],
   ['text-editor.css', 'nocturne-v1'],
-  ['tree-view.css', 'nocturne-v1'],
+  ['tree-view.css', 'nocturne-v2'],
 ]) {
   assert.match(html, new RegExp(`\\./${asset.replace('.', '\\.')}\\?v=${version}`),
     `${asset} carries the new cache-busting version`);
