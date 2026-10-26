@@ -99,6 +99,10 @@ check('json', ':[\n  {\n    "_id": "6add467b",\n    "index": 0\n  }\n]',
   { message: 'Stray text ":" before the JSON starts', line: 1, col: 1, marked: ':', fix: 'Remove it' });
 check('json', 'Response: {"a": 1}',
   { message: 'Stray text "Response:" before the JSON starts', line: 1, col: 1, marked: 'Response: ', fix: 'Remove it' });
+// A double-encoded payload (JSON inside a quoted string) keeps its opening
+// quote: only the stray ":" goes.
+check('json', ':"[{\\"a\\":1}]"', { message: 'Stray text ":" before the JSON starts', line: 1, col: 1, marked: ':', fix: 'Remove it' });
+check('json', 'body: "{\\"a\\":1}"', { message: 'Stray text "body:" before the JSON starts', line: 1, col: 1, fix: 'Remove it' });
 check('json', 'data = [1, 2]', { message: 'Stray text "data =" before the JSON starts', line: 1, col: 1, fix: 'Remove it' });
 check('json', '  \n  :{"a": 1}', { message: 'Stray text ":" before the JSON starts', line: 2, col: 3, fix: 'Remove it' });
 check('xml', 'xml: <a><b/></a>', { message: 'Stray text "xml:" before the XML starts', line: 1, col: 1, marked: 'xml:', fix: 'Remove it' });

@@ -103,10 +103,11 @@ function isWordStart(ch) {
 export function diagnoseJson(text) {
   const n = text.length;
   // Stray text before the payload: a ":" left over from copying a key, or
-  // a prefix like "Response: " from a log line.
+  // a prefix like "Response: " from a log line. The payload starts at the
+  // first {, [ or " (a quoted, double-encoded payload starts with ").
   const start = firstContent(text);
-  if (start < n && !/[{["\d\-.+'tfnTFNu]/.test(text[start]) || /^[A-Za-z_$][\w$ .-]*[:=]\s*[{[]/.test(text.slice(start, start + STRAY_SCAN_CHARS))) {
-    const at = text.slice(start, start + STRAY_SCAN_CHARS).search(/[{[]/);
+  if (start < n && !/[{["\d\-.+'tfnTFNu]/.test(text[start]) || /^[A-Za-z_$][\w$ .-]*[:=]\s*[{["]/.test(text.slice(start, start + STRAY_SCAN_CHARS))) {
+    const at = text.slice(start, start + STRAY_SCAN_CHARS).search(/[{["]/);
     if (at > 0) {
       const stray = text.slice(start, start + at);
       return makeIssue(text, {
