@@ -739,6 +739,7 @@ function stashTextUi(win) {
     ui.selStart = editor.selectionStart ?? 0;
     ui.selEnd = editor.selectionEnd ?? 0;
   } catch (_) { /* selection APIs can throw on some input states */ }
+  try { ui.snapshot = syntaxEditor.scrollSnapshot(); } catch (_) { ui.snapshot = null; }
 }
 
 function stashTreeUi(win) {
@@ -750,11 +751,15 @@ function stashTreeUi(win) {
 
 function restoreTextUi(win) {
   const ui = win.ui.text;
-  editor.scrollTop = ui.scrollTop;
-  editor.scrollLeft = ui.scrollLeft;
   try {
     editor.setSelectionRange(ui.selStart, ui.selEnd);
   } catch (_) { /* offsets may exceed a truncated large-mode preview */ }
+  editor.scrollTop = ui.scrollTop;
+  editor.scrollLeft = ui.scrollLeft;
+  // The pixel offsets above are clamped while the new document is still
+  // being laid out; the editor's own snapshot lands the view where the user
+  // left it once layout catches up.
+  try { syntaxEditor.restoreScroll(ui.snapshot); } catch (_) {}
 }
 
 async function activateWindow(id, { stash = true } = {}) {
