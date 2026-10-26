@@ -401,6 +401,14 @@ const [html, css, app, build, pkg] = await Promise.all(
   assert.equal(editor.selectionEnd, 20, 'selection end restored');
   clickTab('window-2');
   assert.equal(editor.scrollTop, 10, 'window-2 kept its own scroll position');
+  // In a real browser the pixel offset is clamped while the restored
+  // document is still being laid out (jsdom has no layout, so the checks
+  // above can't see that): the editor's own scroll snapshot is saved per
+  // window and re-applied after the switch so the view lands where it was.
+  assert.match(app, /ui\.snapshot = syntaxEditor\.scrollSnapshot\(\)/,
+    'switching away saves the editor scroll snapshot');
+  assert.match(app, /syntaxEditor\.restoreScroll\(ui\.snapshot\)/,
+    'switching back re-applies it once layout is ready');
 
   // Tree view: expansion and scroll survive a round-trip.
   clickTab('window-1');

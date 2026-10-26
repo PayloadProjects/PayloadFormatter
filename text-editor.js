@@ -467,6 +467,14 @@ export function createSyntaxEditor(host) {
     },
     // Called after the cursor moves or the document changes.
     onCursor(listener) { cursorListeners.add(listener); },
+    // Scroll position as the editor understands it (anchored to a document
+    // position, not raw pixels), and its restore. Setting scrollTop right
+    // after replacing the document is clamped by the browser to the height
+    // laid out so far; the editor applies a snapshot once layout is ready.
+    scrollSnapshot: () => view.scrollSnapshot(),
+    restoreScroll(snapshot) {
+      if (snapshot) view.dispatch({ effects: snapshot });
+    },
     // The path and value under the cursor, or null without a known mode.
     selection() {
       const pos = view.state.selection.main.head;
