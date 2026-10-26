@@ -92,7 +92,7 @@ assert.match(editorJs, /'\.cm-line': \{ padding: '0 12px' \}/, 'editor lines hav
 // Cache-busted asset versions cover every touched file.
 for (const [asset, version] of [
   ['style.css', 'nocturne-v4'],
-  ['app.js', 'nocturne-v4'],
+  ['app.js', 'nocturne-v5'],
   ['text-editor.css', 'nocturne-v2'],
   ['tree-view.css', 'nocturne-v2'],
 ]) {

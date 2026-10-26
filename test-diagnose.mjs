@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
-import { diagnose, applyFix, lineColumn } from './payload-diagnose.js';
+import { diagnose, applyFix, lineColumn, guessMode } from './payload-diagnose.js';
 
 const { DOMParser } = new JSDOM('').window;
 const xmlValid = (text) => new DOMParser().parseFromString(text, 'application/xml')
@@ -87,6 +87,22 @@ check('json', '{"a": [1,\n', { message: 'The text ends after a comma', line: 1, 
 check('json', '{"a":1}{"b":2}', { message: 'Extra content after the end of the JSON', line: 1, col: 8, fix: null });
 check('json', '{"a": @}', { message: 'Unexpected character "@"', line: 1, col: 7, fix: null });
 check('json', '[1 2]', { message: 'Missing comma after 1', line: 1, col: 2, fix: 'Add the comma' });
+
+// Stray text before the payload (a ":" left from copying a key, a log
+// prefix): strict detection can't tell JSON from XML, so the guess and the
+// diagnosis must still find it and offer to remove the prefix.
+assert.equal(guessMode(':[\n  {"a": 1}\n]'), 'json', 'a leading ":" still reads as JSON');
+assert.equal(guessMode('Response: {"a":1}'), 'json');
+assert.equal(guessMode('log: <a/>'), 'xml');
+assert.equal(guessMode('just words'), null, 'plain text is neither');
+check('json', ':[\n  {\n    "_id": "6add467b",\n    "index": 0\n  }\n]',
+  { message: 'Stray text ":" before the JSON starts', line: 1, col: 1, marked: ':', fix: 'Remove it' });
+check('json', 'Response: {"a": 1}',
+  { message: 'Stray text "Response:" before the JSON starts', line: 1, col: 1, marked: 'Response: ', fix: 'Remove it' });
+check('json', 'data = [1, 2]', { message: 'Stray text "data =" before the JSON starts', line: 1, col: 1, fix: 'Remove it' });
+check('json', '  \n  :{"a": 1}', { message: 'Stray text ":" before the JSON starts', line: 2, col: 3, fix: 'Remove it' });
+check('xml', 'xml: <a><b/></a>', { message: 'Stray text "xml:" before the XML starts', line: 1, col: 1, marked: 'xml:', fix: 'Remove it' });
+check('xml', '<a/>\ntrailing', { message: 'Text after the closing root tag', line: 2, col: 1, fix: 'Remove it' });
 
 for (const valid of ['{"ok": true}', '[]', '{}', '"just a string"', '42', '  {"a": [1, 2.5e3, -0.1, "\\u00e9\\n"]}\n',
   '{"nested": {"deep": [{"x": null}]}}']) {
@@ -185,6 +201,25 @@ assert.deepEqual(lineColumn('a\nbc\nd', 4), { line: 2, col: 3 });
   text = '{"a": 1}{"b": 2}';
   issues.check();
   assert.equal(q('#issueFixBtn').hidden, true, 'no fix button when the fix would be a guess');
+
+  // The app's strict detection returns null for ':[ … ]'; the bar must
+  // still explain it (this is what the formatter's "Could not detect JSON
+  // or XML" case hands over).
+  const strict = createIssueHelper({
+    syntaxEditor,
+    getText: () => text,
+    getMode: () => null,
+    isPreview: () => false,
+    isTree: () => false,
+    showText() {},
+    onFixed: () => { fixed += 1; },
+  });
+  text = ':[\n  {"a": 1}\n]';
+  assert.equal(strict.check()?.message, 'Stray text ":" before the JSON starts', 'undetected payloads still get explained');
+  q('#issueFixBtn').click();
+  assert.equal(text, '[\n  {"a": 1}\n]', 'Remove it leaves the JSON');
+  assert.equal(q('#issueBar').hidden, true);
+  assert.equal(fixed, 2, 'and hands over to formatting');
   delete globalThis.document;
 }
 

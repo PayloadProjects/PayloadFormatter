@@ -19,6 +19,27 @@ export function diagnose(text, mode) {
   return null;
 }
 
+// JSON or XML, judged leniently: also when stray text (":", "Response: ",
+// a log prefix) comes before the payload, which strict detection rejects.
+const STRAY_SCAN_CHARS = 400;
+export function guessMode(text) {
+  const source = String(text ?? '');
+  const start = firstContent(source);
+  const first = source[start];
+  if (first === '{' || first === '[' || first === '"') return 'json';
+  if (first === '<') return 'xml';
+  const head = source.slice(start, start + STRAY_SCAN_CHARS);
+  const at = head.search(/[{[<]/);
+  if (at < 0) return null;
+  return head[at] === '<' ? 'xml' : 'json';
+}
+
+function firstContent(text) {
+  let i = 0;
+  while (i < text.length && (/\s/.test(text[i]) || text.charCodeAt(i) === 0xFEFF)) i += 1;
+  return i;
+}
+
 // Line and column (both 1-based) of an offset.
 export function lineColumn(text, offset) {
   let line = 1;
@@ -81,6 +102,22 @@ function isWordStart(ch) {
 
 export function diagnoseJson(text) {
   const n = text.length;
+  // Stray text before the payload: a ":" left over from copying a key, or
+  // a prefix like "Response: " from a log line.
+  const start = firstContent(text);
+  if (start < n && !/[{["\d\-.+'tfnTFNu]/.test(text[start]) || /^[A-Za-z_$][\w$ .-]*[:=]\s*[{[]/.test(text.slice(start, start + STRAY_SCAN_CHARS))) {
+    const at = text.slice(start, start + STRAY_SCAN_CHARS).search(/[{[]/);
+    if (at > 0) {
+      const stray = text.slice(start, start + at);
+      return makeIssue(text, {
+        message: `Stray text "${snippet(stray)}" before the JSON starts`,
+        hint: `Remove it so the payload begins with ${text[start + at]}.`,
+        from: start,
+        to: start + at,
+        fix: { label: 'Remove it', changes: [{ from: start, to: start + at, insert: '' }] },
+      });
+    }
+  }
   // Each open container: { ch, at, state, lastComma }. lastComma is the
   // offset of a comma that is still the most recent token in it, else -1.
   // Object states: 'key-or-end' | 'key' | 'colon' | 'value' | 'comma-or-end'.
@@ -604,11 +641,19 @@ export function diagnoseXml(text) {
     }
     if (stack.length === 0 && textEnd > i && text.slice(i, textEnd).trim() && (rootClosed || i > 0 || lt >= 0)) {
       const from = i + (text.slice(i, textEnd).length - text.slice(i, textEnd).trimStart().length);
+      const strayEnd = textEnd - (text.slice(from, textEnd).length - text.slice(from, textEnd).trimEnd().length);
+      const before = !rootClosed;
       return issue({
-        message: rootClosed ? 'Text after the closing root tag' : 'Text before the first tag',
-        hint: 'Everything must sit inside the single top-level element.',
+        message: before
+          ? `Stray text "${snippet(text.slice(from, strayEnd))}" before the XML starts`
+          : 'Text after the closing root tag',
+        hint: before ? 'Remove it so the payload begins with a tag.' : 'Everything must sit inside the single top-level element.',
         from,
-        to: Math.min(textEnd, from + 1),
+        to: strayEnd,
+        // Before the root, or trailing text after it: removing is the fix.
+        fix: before || lt < 0
+          ? { label: 'Remove it', changes: [{ from, to: strayEnd, insert: '' }] }
+          : undefined,
       });
     }
     if (lt < 0) break;
