@@ -93,12 +93,16 @@ export function createIssueHelper({ syntaxEditor, getText, getMode, isPreview, i
   }
 
   // The user edited the payload: the marked spot may have moved, so re-check
-  // after a pause while the bar is showing.
+  // after a pause while the bar is showing. When their own edit is what made
+  // the payload valid (say, deleting a stray ':'), finish the job the way the
+  // fix button does and format it.
   function edited() {
     if (!current || applying) return;
     clearTimeout(timer);
     if (getText().length > MAX_LIVE_RECHECK_CHARS) return;
-    timer = setTimeout(check, RECHECK_DELAY_MS);
+    timer = setTimeout(() => {
+      if (!check()) onFixed?.(null);
+    }, RECHECK_DELAY_MS);
   }
 
   return { check, hide, edited, current: () => current };
