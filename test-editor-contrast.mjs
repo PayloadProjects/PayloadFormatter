@@ -41,7 +41,7 @@ for(const [theme,tokens] of [['dark',dark],['light',light]]) {
   for(const token of readingTokens) {
     const foreground=resolve(tokens,token);
     assert.ok(contrast(foreground,resolve(tokens,'--editor-bg')) >= (theme==='dark'?7:4.5),`${theme} ${token}: reading contrast`);
-    for(const state of ['--tree-hover-bg','--tree-focus-bg','--tree-match-bg','--tree-hit-bg','--code-selection-bg']) {
+    for(const state of ['--tree-hover-bg','--tree-focus-bg','--tree-match-bg','--tree-hit-bg','--code-selection-bg','--issue-line-bg']) {
       assert.ok(contrast(foreground,resolve(tokens,state))>=4.5,`${theme} ${token} on ${state}: text remains readable`);
     }
   }

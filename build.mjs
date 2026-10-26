@@ -26,6 +26,8 @@ const files = [
   'text-search.js',
   'inspector.js',
   'minimap.js',
+  'payload-diagnose.js',
+  'issue-helper.js',
   'text-editor.css',
   'vendor/codemirror/codemirror.js',
   'vendor/codemirror/LICENSE',

@@ -79,6 +79,17 @@
 
 .editor-frame[data-view="tree"] .text-editor { display: none; }
 
+/* Problem spot from the issue bar: wavy underline plus a tinted line, so
+   it is visible without relying on colour alone. */
+.text-editor .cm-issue {
+  text-decoration: underline wavy var(--error);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+  background: var(--issue-bg);
+  border-radius: 2px;
+}
+.text-editor .cm-issue-line { background: var(--issue-line-bg); }
+
 /* Minimap column (minimap.js); hidden while empty and on narrow screens. */
 .minimap { position: relative; flex: 0 0 64px; border-left: 1px solid var(--divider); background: var(--editor-bg); cursor: pointer; touch-action: none; }
 .minimap canvas { position: absolute; inset: 0; display: block; }
