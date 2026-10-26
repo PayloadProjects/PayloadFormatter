@@ -3,7 +3,7 @@
 // and offers the fix when it is unambiguous. The diagnosis itself is pure
 // logic in payload-diagnose.js; this module only shows it and applies the
 // fix through the editor as an ordinary edit.
-import { diagnose } from './payload-diagnose.js';
+import { diagnose, guessMode } from './payload-diagnose.js';
 
 // Re-checking while the user types waits for a pause; above this size the
 // bar only refreshes on the next Format (a full scan per pause is wasteful).
@@ -68,7 +68,9 @@ export function createIssueHelper({ syntaxEditor, getText, getMode, isPreview, i
       hide();
       return null;
     }
-    const issue = diagnose(text, getMode(text));
+    // Strict detection gives up on stray text before the payload; the
+    // lenient guess still finds the JSON or XML so the bar can explain it.
+    const issue = diagnose(text, getMode(text) || guessMode(text));
     if (!issue) {
       hide();
       return null;
