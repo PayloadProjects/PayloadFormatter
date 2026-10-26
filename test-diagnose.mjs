@@ -99,6 +99,10 @@ check('json', ':[\n  {\n    "_id": "6add467b",\n    "index": 0\n  }\n]',
   { message: 'Stray text ":" before the JSON starts', line: 1, col: 1, marked: ':', fix: 'Remove it' });
 check('json', 'Response: {"a": 1}',
   { message: 'Stray text "Response:" before the JSON starts', line: 1, col: 1, marked: 'Response: ', fix: 'Remove it' });
+// A double-encoded payload (JSON inside a quoted string) keeps its opening
+// quote: only the stray ":" goes.
+check('json', ':"[{\\"a\\":1}]"', { message: 'Stray text ":" before the JSON starts', line: 1, col: 1, marked: ':', fix: 'Remove it' });
+check('json', 'body: "{\\"a\\":1}"', { message: 'Stray text "body:" before the JSON starts', line: 1, col: 1, fix: 'Remove it' });
 check('json', 'data = [1, 2]', { message: 'Stray text "data =" before the JSON starts', line: 1, col: 1, fix: 'Remove it' });
 check('json', '  \n  :{"a": 1}', { message: 'Stray text ":" before the JSON starts', line: 2, col: 3, fix: 'Remove it' });
 check('xml', 'xml: <a><b/></a>', { message: 'Stray text "xml:" before the XML starts', line: 1, col: 1, marked: 'xml:', fix: 'Remove it' });
@@ -202,6 +206,24 @@ assert.deepEqual(lineColumn('a\nbc\nd', 4), { line: 2, col: 3 });
   issues.check();
   assert.equal(q('#issueFixBtn').hidden, true, 'no fix button when the fix would be a guess');
 
+  // Fixing it by hand: once an edit makes the payload valid, the bar hides
+  // and formatting runs, just as after the fix button.
+  text = ':[1, 2]';
+  issues.check();
+  text = '[1, 2]';
+  issues.edited();
+  await new Promise((resolve) => setTimeout(resolve, 450));
+  assert.equal(q('#issueBar').hidden, true, 'a manual fix clears the bar after a pause');
+  assert.equal(fixed, 2, 'and formats the now-valid payload');
+  text = '{"a": 1 "b": 2}';
+  issues.check();
+  text = '{"a": 1 "b": 2, "c": 3}';
+  issues.edited();
+  await new Promise((resolve) => setTimeout(resolve, 450));
+  assert.equal(q('#issueBar').hidden, false, 'an edit that leaves it broken keeps the bar');
+  assert.equal(fixed, 2, 'and does not format');
+  issues.hide();
+
   // The app's strict detection returns null for ':[ … ]'; the bar must
   // still explain it (this is what the formatter's "Could not detect JSON
   // or XML" case hands over).
@@ -219,7 +241,7 @@ assert.deepEqual(lineColumn('a\nbc\nd', 4), { line: 2, col: 3 });
   q('#issueFixBtn').click();
   assert.equal(text, '[\n  {"a": 1}\n]', 'Remove it leaves the JSON');
   assert.equal(q('#issueBar').hidden, true);
-  assert.equal(fixed, 2, 'and hands over to formatting');
+  assert.equal(fixed, 3, 'and hands over to formatting');
   delete globalThis.document;
 }
 
