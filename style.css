@@ -93,6 +93,11 @@
   --notice-border: #5c4721;
   --notice-icon: #f0b45b;
 
+  --issue-bg: rgba(245, 154, 160, .16);
+  --issue-line-bg: #2a1a22;
+  --issue-bar-bg: #2a1a20;
+  --issue-bar-border: #5a2f37;
+
   --mini-key: #34415f;
   --mini-str: #4a3f2c;
   --mini-num: #30463b;
@@ -188,6 +193,11 @@
   --notice-bg: #fff6e6;
   --notice-border: #eed3a0;
   --notice-icon: #b7791f;
+
+  --issue-bg: rgba(180, 35, 24, .10);
+  --issue-line-bg: #fdf0ef;
+  --issue-bar-bg: #fef1f0;
+  --issue-bar-border: #f2c4bf;
 
   --mini-key: #c3cdee;
   --mini-str: #e6cfb4;
@@ -375,6 +385,17 @@ button.danger:hover:not(:disabled) { color: var(--danger-text); border-color: va
 .empty-mark { width: 44px; height: 44px; display: grid; place-items: center; margin-bottom: 8px; border: 1px solid var(--brand-mark-border); border-radius: 12px; background: var(--brand-mark-bg); font-family: var(--font-mono); font-size: 17px; color: var(--brand-mark-text); }
 .editor:not(.is-empty) ~ .empty-state { display: none; }
 .editor.large-mode { cursor: default; }
+
+/* Issue bar: what is wrong with the payload, where, and the fix. */
+.issue-bar { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 8px 10px 8px 14px; border-bottom: 1px solid var(--issue-bar-border); background: var(--issue-bar-bg); color: var(--text); font-size: 13px; line-height: 1.45; }
+.issue-icon { flex: 0 0 auto; display: block; color: var(--error); }
+.issue-text { flex: 1 1 360px; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.issue-text strong { font-weight: 600; }
+.issue-where { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.issue-hint { flex-basis: 100%; color: var(--soft); }
+.issue-hint:empty { display: none; }
+.issue-bar button { height: 28px; font-size: 12.5px; }
+.issue-bar .issue-close { width: 28px; padding: 0; border-color: transparent; background: transparent; color: var(--muted); font-size: 16px; }
 
 /* Path bar: where the cursor or selected tree row sits. */
 .path-bar { flex: 0 0 auto; min-height: 32px; display: flex; align-items: center; gap: 10px; padding: 4px 10px 4px 14px; border-bottom: 1px solid var(--divider); color: var(--muted); font-family: var(--font-mono); font-size: 12.5px; }

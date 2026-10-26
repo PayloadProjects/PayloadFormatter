@@ -6,6 +6,7 @@ import { createWindowManager, MAX_WINDOWS } from './window-manager.js';
 import { initEpochPopover } from './epoch-popover.js';
 import { createInspector, selectionFromTreeNode } from './inspector.js';
 import { createMinimap } from './minimap.js';
+import { createIssueHelper } from './issue-helper.js';
 import {
   getTabId,
   touchTabHeartbeat,
@@ -142,6 +143,22 @@ inspector = createInspector({
   },
 });
 
+// Issue bar: what is still wrong after formatting, where, and the fix.
+// Once a fix makes the payload valid, it is formatted right away.
+const issues = createIssueHelper({
+  syntaxEditor,
+  getText: getPayloadText,
+  getMode: (text) => detectModeFast(text),
+  isPreview: inLargeMode,
+  isTree: () => treeController.isTree(),
+  showText: () => treeController.setView('text'),
+  onFixed: async () => {
+    await formatPayload();
+    if (!issues.current()) setStatus('Fixed. The payload is valid and formatted.', 'success');
+  },
+  onNext: (next) => setStatus(`Fixed one problem. Next: ${next.message} (line ${next.line.toLocaleString()}).`, 'warning'),
+});
+
 // Status bar: cursor position (text view, not in a read-only preview) and
 // the format shortcut in this platform's spelling.
 syntaxEditor.onCursor(syncCursorPos);
@@ -171,6 +188,7 @@ treeController.refresh();
 
 editor.addEventListener('input', () => {
   editRevision += 1;
+  issues.edited();
   // The editor fires 'input' after every user edit (text-editor.js), and a
   // burst of edits can land in one task. Keep revision protection
   // immediate; coalesce metadata/highlighting work.
@@ -1037,6 +1055,7 @@ async function jumpToHistory(position) {
 // switches). No history side effects: callers manage their own entries.
 function setPayloadText(text, { treeRestore } = {}) {
   editRevision += 1;
+  issues.hide();
   if (text.length >= LARGE_PAYLOAD_CHARS) {
     enterLargeMode(text, { formatted: false });
     refreshUiQuick(text);
@@ -1291,14 +1310,29 @@ async function formatCurrentPayload() {
     await treeController.refresh();
 
     if (result.bestEffort) {
-      setStatus(result.repairNote || 'Formatted with a syntax warning.', 'warning');
+      // The issue bar says what is wrong in plain words, points at it and
+      // offers the fix; the status line repeats it in the same terms (the
+      // parser's own message counts lines in the text as pasted).
+      const issue = issues.check();
+      setStatus(
+        issue
+          ? `Formatted as far as possible. ${issue.message} (line ${issue.line.toLocaleString()}).`
+          : result.repairNote || 'Formatted with a syntax warning.',
+        'warning',
+      );
     } else if (result.repairNote) {
+      issues.hide();
       setStatus(result.repairNote, 'success');
     } else {
+      issues.hide();
       setStatus(`${result.mode.toUpperCase()} formatted in ${result.elapsedMs} ms.`, 'success');
     }
   } catch (error) {
-    setStatus(error?.message || String(error), 'error');
+    const issue = editRevision === startedRevision ? issues.check() : null;
+    setStatus(
+      issue ? `${issue.message} (line ${issue.line.toLocaleString()}).` : error?.message || String(error),
+      'error',
+    );
   }
 }
 
@@ -1409,6 +1443,7 @@ async function pasteTextAndFormat(text) {
 }
 
 function resetEditorForReplace() {
+  issues.hide();
   if (inLargeMode()) exitLargeMode();
   editor.value = '';
   try { editor.setSelectionRange(0, 0); } catch (_) {}
@@ -1417,6 +1452,7 @@ function resetEditorForReplace() {
 
 function clearPayload() {
   if (!editor.value && !inLargeMode()) return setStatus('Editor is already empty.');
+  issues.hide();
   exitLargeMode();
   editor.value = '';
   editRevision += 1;

@@ -41,9 +41,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" />
-    <link rel="stylesheet" href="./style.css?v=nocturne-v3" />
+    <link rel="stylesheet" href="./style.css?v=nocturne-v4" />
     <link rel="stylesheet" href="./tree-view.css?v=nocturne-v2" />
-    <link rel="stylesheet" href="./text-editor.css?v=nocturne-v1" />
+    <link rel="stylesheet" href="./text-editor.css?v=nocturne-v2" />
   </head>
   <body>
     <main class="shell">
@@ -242,6 +242,18 @@
 
           <div id="largeNotice" class="large-notice" role="status" hidden></div>
 
+          <div id="issueBar" class="issue-bar" role="status" aria-live="polite" hidden>
+            <svg class="issue-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><path d="M12 16.5h.01"/></svg>
+            <span class="issue-text">
+              <strong id="issueTitle"></strong>
+              <span id="issueWhere" class="issue-where"></span>
+              <span id="issueHint" class="issue-hint"></span>
+            </span>
+            <button id="issueGoBtn" type="button">Go to line</button>
+            <button id="issueFixBtn" class="primary" type="button" hidden>Apply fix</button>
+            <button id="issueCloseBtn" class="issue-close" type="button" aria-label="Dismiss" title="Dismiss">×</button>
+          </div>
+
           <div id="pathBar" class="path-bar" hidden>
             <span id="pathCrumbs" class="path-crumbs" role="note"></span>
             <button id="copyPathBtn" class="path-copy" type="button">Copy path</button>
@@ -304,7 +316,7 @@
       </footer>
     </main>
 
-    <script type="module" src="./app.js?v=nocturne-v3"></script>
+    <script type="module" src="./app.js?v=nocturne-v4"></script>
     <script type="module" src="./ui-controls.js?v=tree-actions-visible-v1"></script>
   </body>
 </html>

@@ -288,6 +288,9 @@ export function createSyntaxEditor(host) {
   const language = new Compartment();
   const wrapping = new Compartment();
   const readOnly = new Compartment();
+  // The problem spot found by the issue bar (payload-diagnose.js).
+  const issueMarks = new Compartment();
+  let issueRange = null;
   let mode = null;
   let wrapOn = root.dataset.wrap === 'on';
   let readOnlyOn = false;
@@ -331,6 +334,7 @@ export function createSyntaxEditor(host) {
       // Tabs render 2 columns wide (text-editor.css); measure them the same.
       EditorState.tabSize.of(2),
       readOnly.of(EditorState.readOnly.of(readOnlyOn)),
+      issueMarks.of([]),
       editorTheme,
       EditorView.contentAttributes.of({
         'aria-label': 'JSON or XML payload',
@@ -471,6 +475,39 @@ export function createSyntaxEditor(host) {
     // position, not raw pixels), and its restore. Setting scrollTop right
     // after replacing the document is clamped by the browser to the height
     // laid out so far; the editor applies a snapshot once layout is ready.
+    // Underlines the problem spot and tints its line; null clears it.
+    // Offsets are clamped to the document, which may have changed since.
+    showIssue(range) {
+      issueRange = range;
+      const length = view.state.doc.length;
+      if (!range || !length) {
+        reconfigure(issueMarks, []);
+        return;
+      }
+      let from = Math.max(0, Math.min(range.from, length));
+      let to = Math.max(from, Math.min(range.to, length));
+      if (to === from) {
+        if (from < length) to = from + 1;
+        else from = Math.max(0, from - 1);
+      }
+      const line = view.state.doc.lineAt(from);
+      reconfigure(issueMarks, EditorView.decorations.of(Decoration.set([
+        Decoration.line({ class: 'cm-issue-line' }).range(line.from),
+        Decoration.mark({ class: 'cm-issue' }).range(from, to),
+      ], true)));
+    },
+    hasIssue: () => issueRange !== null,
+    // Puts the cursor on a spot, centred in view, and focuses the editor.
+    reveal(pos) {
+      const anchor = Math.max(0, Math.min(pos, view.state.doc.length));
+      view.dispatch({ selection: { anchor }, effects: EditorView.scrollIntoView(anchor, { y: 'center' }) });
+      view.focus();
+    },
+    // A fix from the issue bar, applied as one ordinary edit that fires the
+    // usual 'input' event.
+    applyChanges(changes) {
+      view.dispatch({ changes, userEvent: 'input.fix' });
+    },
     scrollSnapshot: () => view.scrollSnapshot(),
     restoreScroll(snapshot) {
       if (snapshot) view.dispatch({ effects: snapshot });
