@@ -362,11 +362,12 @@ export function initCompare({ host, storageScope = 'tab', windows, activeWindowI
     });
     return button;
   };
-  const copyMenu = makeMenu('Copy', 'Copy or download',
+  const copyMenu = makeMenu('Copy', 'Copy a side or the differences',
     copyAction('Copy left, as pasted', () => copyText(left.raw, `Copied ${left.name}.`)),
     copyAction('Copy right, as pasted', () => copyText(right.raw, `Copied ${right.name}.`)),
-    copyAction('Copy differences', () => copyText(diffText(), 'Copied the differences as a unified diff.')),
-    copyAction('Download differences (.diff)', () => downloadText(diffText(), 'comparison.diff')));
+    copyAction('Copy differences', () => copyText(diffText(), 'Copied the differences as a unified diff.')));
+    // Parked for now: download the differences as a .diff file.
+    // copyAction('Download differences (.diff)', () => downloadText(diffText(), 'comparison.diff')));
 
   const optionsGroup = el('div', { class: 'compare-options', role: 'group', 'aria-label': 'Compare options' },
     optionButton('format', 'Format', 'Add line breaks and indentation before comparing. Your data is never changed; turn off to see exactly what was pasted.'),
@@ -1446,15 +1447,16 @@ export function initCompare({ host, storageScope = 'tab', windows, activeWindowI
     }
   }
 
-  function downloadText(text, name) {
-    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
-    const link = el('a', { href: url, download: name });
-    document.body.append(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setStatus(`Downloaded ${name}.`, 'success');
-  }
+  // Parked for now, along with its menu item above.
+  // function downloadText(text, name) {
+  //   const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+  //   const link = el('a', { href: url, download: name });
+  //   document.body.append(link);
+  //   link.click();
+  //   link.remove();
+  //   setTimeout(() => URL.revokeObjectURL(url), 1000);
+  //   setStatus(`Downloaded ${name}.`, 'success');
+  // }
 
   // --- Choosing what to compare ----------------------------------------------------------
 

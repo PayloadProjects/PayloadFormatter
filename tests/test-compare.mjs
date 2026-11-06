@@ -185,6 +185,11 @@ const commaOnly = check('[\n  1\n],\n"x"', '[\n  1\n]\n"x"');
 assert.equal(commaOnly.counts.changed, 1, '], and ] pair up as one changed line');
 assert.equal(commaOnly.counts.added + commaOnly.counts.removed, 0);
 
+const arrayEdit = check(pretty({ b: [1, 2], s: ['open', 'x'] }), pretty({ b: [1, 3], s: ['closed', 'x'] }));
+assert.equal(arrayEdit.counts.changed, 2, 'an edited array value is one changed line');
+assert.equal(arrayEdit.counts.added + arrayEdit.counts.removed, 0, 'not a removed line and an added one');
+assert.equal(check('[\n  1,\n  2\n]', '[\n  1,\n  2,\n  3\n]').counts.changed, 1, 'adding after the last item only changes its comma');
+
 // --- Choosing what to ignore --------------------------------------------------------
 assert.equal(canonicalNumber('1.0'), canonicalNumber('1'));
 assert.equal(canonicalNumber('1e2'), canonicalNumber('100'));

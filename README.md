@@ -43,7 +43,7 @@ A fast JSON and XML formatter that runs entirely in your browser. Paste a payloa
 - Show menu: only the differences (click a hidden section to open it), a line detail panel showing long lines in full, and which kinds of change to highlight and step through
 - Find across both sides, and `:120` to go to a line
 - A path bar on each side showing where the cursor or current difference sits, with Copy path, plus the line and column under each pane
-- Copy a side exactly as pasted, copy the differences, or download them as a `.diff`
+- Copy a side exactly as pasted, or copy the differences as a unified diff
 - Paste, open a file, or drop one on a side, or pick any window or one of its earlier payloads. Pasting over a payload replaces it, and `Ctrl/Cmd + Z` brings it back
 - Click `⇄` to jump to the other end of a moved block
 - Each window has its own comparison, side names and position. A new window starts with its own payload on the left, and a side showing a window always shows that window's current text

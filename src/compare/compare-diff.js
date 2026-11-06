@@ -271,7 +271,12 @@ function words(line) {
   return line.toLowerCase().match(/[\p{L}\p{N}_]+/gu) || [];
 }
 
+// A line that is only a value: an array item such as `2,` or `"open"`.
+const BARE_VALUE = /^\s*(?:"(?:[^"\\]|\\.)*"|-?\d[\d.eE+-]*|true|false|null),?\s*$/;
+
 function similarity(left, right, leftWords, rightWords) {
+  // Two values in the same spot are one value edited, even with nothing in common.
+  if (BARE_VALUE.test(left) && BARE_VALUE.test(right)) return 0.5;
   const leftKey = /^\s*"([^"]*)"\s*:/.exec(left)?.[1];
   const rightKey = /^\s*"([^"]*)"\s*:/.exec(right)?.[1];
   if (leftKey !== undefined && leftKey === rightKey) return 0.6;

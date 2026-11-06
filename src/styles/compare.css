@@ -71,8 +71,8 @@ html[data-compare="on"] .status-meta { display: none; }
 .compare-options { flex: none; display: flex; align-items: center; gap: 4px; }
 .compare-bar > .strip-btn { flex: none; }
 /* Narrow frames take a second toolbar row rather than cutting controls off. */
-@container editor-frame (max-width: 1040px) {
-  .editor-frame[data-compare="on"] .compare-bar { flex: 1 1 100%; flex-wrap: wrap; }
+@container editor-frame (max-width: 900px) {
+  .editor-frame[data-compare="on"] .compare-bar { flex: 1 1 600px; flex-wrap: wrap; }
   .compare-summary { flex: 1 1 100%; order: 10; white-space: normal; }
   .compare-options { flex-wrap: wrap; }
 }
