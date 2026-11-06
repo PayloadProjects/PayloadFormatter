@@ -27,6 +27,23 @@ const [html, css, app, build, pkg] = await Promise.all(
   assert.equal(manager.getActive().id, second.id, 'active is unchanged on rejection');
 }
 
+// --- Model: each window keeps its own view ---
+{
+  const manager = createWindowManager();
+  const win = manager.newWindow();
+  assert.equal(win.view, 'text', 'a new window starts in Text');
+  assert.equal(win.comparing, false);
+  win.view = 'tree';
+  win.comparing = true;
+  const [saved] = manager.toJSON().windows;
+  const restored = createWindowManager().restoreWindow(saved.id, saved.name, '', saved);
+  assert.equal(restored.view, 'tree', 'the view survives a refresh');
+  assert.equal(restored.comparing, true);
+  const older = createWindowManager().restoreWindow('window-9', 'Old');
+  assert.equal(older.view, null, 'an older list leaves it to the app');
+  assert.equal(older.comparing, undefined);
+}
+
 // --- Model: renaming ---
 {
   const manager = createWindowManager();
@@ -163,8 +180,8 @@ const [html, css, app, build, pkg] = await Promise.all(
   manager.setCounter(7);
   const json = manager.toJSON();
   assert.deepEqual(json.windows, [
-    { id: a.id, name: 'First' },
-    { id: 'window-2', name: 'Second' },
+    { id: a.id, name: 'First', view: 'text', comparing: false },
+    { id: 'window-2', name: 'Second', view: 'text', comparing: false },
   ]);
   assert.equal(json.activeId, a.id);
   assert.equal(json.counter, 7);
@@ -427,6 +444,19 @@ const [html, css, app, build, pkg] = await Promise.all(
   assert.equal(treeView.scrollTop, 123, 'tree scroll restored');
   treeRows = [...treeView.querySelectorAll('.tree-row')];
   assert.ok(treeRows[2].parentElement.classList.contains('open'), 'tree expansion restored');
+
+  // Each window remembers its own view.
+  const viewOf = () => doc.querySelector('#editorFrame').dataset.view;
+  assert.equal(viewOf(), 'tree');
+  clickTab('window-2');
+  await sleep(150);
+  assert.equal(viewOf(), 'text', 'a window left in Text stays in Text when another is in Tree');
+  assert.equal(doc.querySelector('#viewTextBtn').getAttribute('aria-pressed'), 'true');
+  assert.equal(doc.querySelector('#viewTreeBtn').getAttribute('aria-pressed'), 'false');
+  clickTab('window-1');
+  await sleep(150);
+  assert.equal(viewOf(), 'tree', 'and the first window comes back in Tree');
+  assert.equal(JSON.parse(dom.window.sessionStorage.getItem('payload-formatter:windows:v1')).windows.find((win) => win.id === 'window-1').view, 'tree', 'a refresh keeps it');
 
   // Toggling tree -> text -> tree also round-trips (leave-tree snapshot).
   doc.querySelector('#viewTextBtn').click();

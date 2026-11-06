@@ -22,7 +22,7 @@ export function createTreeController({ getText, detectMode, setStatus, nextPaint
   const collapseBtn = document.querySelector('#treeCollapseAll');
 
   if (!frame || !textBtn || !treeBtn || !container) {
-    return { refresh: async () => {}, isTree: () => false, setView: () => {}, openPaths: () => [] };
+    return { refresh: async () => {}, isTree: () => false, setView: () => {}, showView: () => {}, openPaths: () => [] };
   }
 
   const tree = createTreeView(container, { onCopyPath: copyPath, onSelect });
@@ -135,6 +135,15 @@ export function createTreeController({ getText, detectMode, setStatus, nextPaint
     if (view === 'tree') refresh(getTreeRestore?.());
   }
 
+  // A window switch puts this window's view back. The switch stashes the old
+  // window and loads the new payload itself, so nothing else happens here.
+  function showView(next) {
+    if (next !== 'tree' && next !== 'text') return;
+    token += 1;
+    view = next;
+    applyView();
+  }
+
   // Rebuilds the tree for the current payload. restore ({ openPaths,
   // scrollTop }) re-applies a captured expansion/scroll snapshot afterwards —
   // used when switching windows so the tree is where the user left it.
@@ -227,6 +236,7 @@ export function createTreeController({ getText, detectMode, setStatus, nextPaint
     isTree: () => view === 'tree',
     hasTree: () => hasTree,
     setView,
+    showView,
     openPaths: () => tree.openPaths(),
   };
 }
