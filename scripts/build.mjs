@@ -11,6 +11,15 @@ const files = [
   'src/tree/tree-controller.js',
   'src/styles/tree-view.css',
   'src/app.js',
+  'src/feature-flags.js',
+  'src/compare/compare-feature.js',
+  'src/compare/compare-diff.js',
+  'src/compare/compare-normalize.js',
+  'src/compare/compare-worker.js',
+  'src/compare/compare-path.js',
+  'src/compare/compare-export.js',
+  'src/compare/compare-session.js',
+  'src/styles/compare.css',
   'src/ui-controls.js',
   'src/format/formatter-worker.js',
   'src/format/payload-detection.js',
@@ -50,7 +59,7 @@ const revision = hash.digest('hex').slice(0, 16);
 for (const file of files.filter(file => /\.(?:js|html)$/.test(file))) {
   let source = await readFile(`dist/${file}`, 'utf8');
   if (file.endsWith('.js')) {
-    source = source.replace(/(['"])(\.\.?\/[^'"\s]+\.js)(?:\?[^'"\s]*)?\1/g,
+    source = source.replace(/(['"])(\.\.?\/[^'"\s]+\.(?:js|css))(?:\?[^'"\s]*)?\1/g,
       (_, quote, path) => `${quote}${path}?v=${revision}${quote}`);
   } else {
     source = source.replace(/(\.\/[^'"\s]+\.(?:js|css))(?:\?[^'"\s]*)?/g,

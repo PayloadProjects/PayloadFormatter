@@ -42,7 +42,7 @@ import {
 // undo history, no 'input' event), like assigning a textarea's value.
 
 // Token colors come from the theme's --syntax-* variables (text-editor.css).
-const highlightStyle = HighlightStyle.define([
+export const highlightStyle = HighlightStyle.define([
   { tag: tags.propertyName, class: 'syntax-key' },
   { tag: [tags.string, tags.attributeValue], class: 'syntax-string' },
   { tag: tags.number, class: 'syntax-number' },
@@ -58,7 +58,7 @@ const highlightStyle = HighlightStyle.define([
   },
 ]);
 
-const editorTheme = EditorView.theme({
+export const editorTheme = EditorView.theme({
   '&': { height: '100%', color: 'var(--editor-text)', backgroundColor: 'var(--editor-bg)' },
   '&.cm-focused': { outline: 'none', boxShadow: 'inset 0 0 0 1px var(--editor-focus)' },
   '.cm-scroller': { fontFamily: 'inherit', lineHeight: 'inherit' },

@@ -2,7 +2,7 @@
 // build step, so the CodeMirror packages are pre-bundled into one ES module
 // and committed. Rebuild after changing this file or the pinned versions in
 // package.json:  npm run vendor:codemirror
-export { EditorState, Compartment, Prec, RangeSetBuilder } from '@codemirror/state';
+export { EditorState, Compartment, Prec, RangeSetBuilder, StateField, StateEffect } from '@codemirror/state';
 export {
   EditorView,
   keymap,
@@ -13,6 +13,9 @@ export {
   drawSelection,
   ViewPlugin,
   Decoration,
+  WidgetType,
+  gutter,
+  GutterMarker,
 } from '@codemirror/view';
 export { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 export { syntaxHighlighting, HighlightStyle, bracketMatching, syntaxTree } from '@codemirror/language';

@@ -10,19 +10,20 @@ export function normalizeEscapedXml(input) {
   return s;
 }
 
-export function prettyXml(xml) {
+// keepEmptyElements leaves <a></a> as written instead of shortening it to <a/>.
+export function prettyXml(xml, { keepEmptyElements = false } = {}) {
   const source = String(xml ?? '').trim();
   if (!source) return '';
-  return formatXmlTokens(tokenizeXml(source));
+  return formatXmlTokens(tokenizeXml(source), keepEmptyElements);
 }
 
-export function formatAndValidateXml(xml) {
+export function formatAndValidateXml(xml, { keepEmptyElements = false } = {}) {
   const source = String(xml ?? '');
   if (!source) throw new Error('Invalid XML: no XML elements were found.');
-  return formatAndValidateXmlStreaming(source);
+  return formatAndValidateXmlStreaming(source, keepEmptyElements);
 }
 
-function formatAndValidateXmlStreaming(source) {
+function formatAndValidateXmlStreaming(source, keepEmptyElements) {
   const chunks = [];
   let buffer = [];
 
@@ -184,7 +185,8 @@ function formatAndValidateXmlStreaming(source) {
     if (!selfClosing) {
       const immediate = findImmediateClosingTagFast(source, tagEnd + 1, name);
       if (immediate >= 0) {
-        write(normalized.slice(0, -1), '/>');
+        if (keepEmptyElements) write(normalized, '</', name, '>');
+        else write(normalized.slice(0, -1), '/>');
         index = immediate;
         textStart = index;
         lastApplied = 'self-end';
@@ -301,7 +303,7 @@ function isXmlWhitespaceCode(code) {
   return code === 32 || code === 9 || code === 10 || code === 13;
 }
 
-function formatXmlTokens(tokens) {
+function formatXmlTokens(tokens, keepEmptyElements = false) {
   const chunks = [];
   let depth = 0;
   let lastApplied = 'undefined';
@@ -374,7 +376,8 @@ function formatXmlTokens(tokens) {
         && tokens[index + 1]?.type === 'close'
         && tokens[index + 1]?.name === token.name
       ) {
-        chunks.push(normalized.slice(0, -1), '/>');
+        if (keepEmptyElements) chunks.push(normalized, '</', token.name, '>');
+        else chunks.push(normalized.slice(0, -1), '/>');
         index += 1;
         lastApplied = 'self-end';
         continue;

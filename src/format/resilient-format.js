@@ -279,7 +279,7 @@ function duplicateKeyWarning({ count, first }) {
   return `Formatted and kept ${what}. Most JSON readers, and the tree view, use only the last value.`;
 }
 
-export function formatXmlBestEffort(input) {
+export function formatXmlBestEffort(input, options = {}) {
   const started = now();
   const original = trimOuterXmlWhitespace(String(input ?? ''));
   if (!original) throw new Error('Nothing to format. Paste or upload a payload first.');
@@ -310,11 +310,11 @@ export function formatXmlBestEffort(input) {
   let formatted = '';
 
   try {
-    formatted = formatAndValidateXml(cleaned);
+    formatted = formatAndValidateXml(cleaned, options);
   } catch (error) {
     valid = false;
     warning = error?.message || 'XML syntax could not be validated.';
-    formatted = prettyXml(cleaned);
+    formatted = prettyXml(cleaned, options);
   }
 
   const normalizedEncoding = xmlEncodingChanged || repairedInnerEncoding || cleaned !== original;
