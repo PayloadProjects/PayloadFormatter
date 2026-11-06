@@ -1,0 +1,19 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+
+const [build, html] = await Promise.all([
+  readFile(new URL('../scripts/build.mjs', import.meta.url), 'utf8'),
+  readFile(new URL('../index.html', import.meta.url), 'utf8'),
+]);
+
+assert.ok(build.includes("'assets/favicon.svg'"),
+  'production build must copy favicon.svg into dist');
+assert.ok(html.includes('rel="icon"'),
+  'index.html must declare a favicon');
+
+assert.match(html, /\.\/assets\/json-xml-formatter-icon\.png\?v=[A-Za-z0-9._-]+/,
+  'browser tab must use a cache-busted PNG favicon');
+assert.ok(build.includes("'assets/json-xml-formatter-icon.png'"),
+  'production build must copy the PNG favicon into dist');
+
+console.log('All favicon deployment regression tests passed.');

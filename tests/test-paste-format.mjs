@@ -1,0 +1,40 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+
+const [app, html] = await Promise.all([
+  readFile(new URL('../src/app.js', import.meta.url), 'utf8'),
+  readFile(new URL('../index.html', import.meta.url), 'utf8'),
+]);
+
+assert.ok(html.includes('id="pasteFormatBtn"'),
+  'combined Paste & Format button must exist');
+assert.ok(html.replace(/<[^>]+>/g, '').includes('Paste and format'),
+  'combined action must be clearly labeled');
+assert.ok(!html.includes('id="pasteBtn"') && !html.includes('id="formatBtn"'),
+  'separate Paste and Format buttons must be removed');
+
+assert.ok(app.includes("pasteFormatBtn.addEventListener('click', () => pasteAndFormatPayload())"),
+  'combined button must trigger one clipboard-and-format workflow');
+assert.ok(app.includes('async function pasteAndFormatPayload({ onlyPayload = false } = {})'),
+  'combined workflow must be implemented as one guarded async action');
+const pasteFlow = app.match(/async function pasteAndFormatPayload\(\{ onlyPayload = false \} = \{\}\) \{([\s\S]*?)\} catch/)?.[1];
+assert.ok(pasteFlow && pasteFlow.includes('resetEditorForReplace();'),
+  'the button loads a fresh payload: it replaces instead of appending');
+assert.ok(pasteFlow && !pasteFlow.includes('isTree()'),
+  'replace applies in every view, so consecutive pastes never concatenate');
+assert.ok(app.includes('acceptPastedText(text);\n    await formatCurrentPayload();'),
+  'clipboard text must be accepted before the same formatter path runs');
+assert.ok(app.includes('async function formatCurrentPayload()'),
+  'button formatting and keyboard formatting must share one implementation');
+assert.ok(app.includes('await formatCurrentPayload();'),
+  'Ctrl/Cmd+Enter wrapper must still use the shared formatter implementation');
+assert.ok(app.includes('pasteFormatBtn.disabled = value'),
+  'combined action must be protected from repeated clicks while busy');
+
+// JSON and XML must still go through the shared worker-based detection/format path.
+assert.ok(app.includes("if (first === '<') return 'xml'"));
+assert.ok(app.includes("if (first === '{' || first === '[') return 'json'"));
+assert.match(html, /app\.js\?v=[A-Za-z0-9._-]+/,
+  'deployment must keep JavaScript cache-busted after UI changes');
+
+console.log('All combined Paste & Format regression tests passed.');

@@ -6,9 +6,9 @@
     <meta name="description" content="A fast, private JSON and XML formatter that runs entirely in your browser." />
     <meta name="color-scheme" content="dark light" />
     <meta name="theme-color" content="#06080c" />
-    <link rel="icon" type="image/svg+xml" href="./favicon.svg?v=nocturne-1" />
-    <link rel="icon" type="image/png" sizes="32x32" href="./json-xml-formatter-icon.png?v=nocturne-1" />
-    <link rel="shortcut icon" type="image/png" href="./json-xml-formatter-icon.png?v=nocturne-1" />
+    <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg?v=nocturne-1" />
+    <link rel="icon" type="image/png" sizes="32x32" href="./assets/json-xml-formatter-icon.png?v=nocturne-1" />
+    <link rel="shortcut icon" type="image/png" href="./assets/json-xml-formatter-icon.png?v=nocturne-1" />
     <script>
       (() => {
         const storageKey = 'payload-formatter:theme:v1';
@@ -41,9 +41,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" />
-    <link rel="stylesheet" href="./style.css?v=nocturne-v4" />
-    <link rel="stylesheet" href="./tree-view.css?v=nocturne-v2" />
-    <link rel="stylesheet" href="./text-editor.css?v=nocturne-v2" />
+    <link rel="stylesheet" href="./src/styles/style.css?v=nocturne-v5" />
+    <link rel="stylesheet" href="./src/styles/tree-view.css?v=nocturne-v2" />
+    <link rel="stylesheet" href="./src/styles/text-editor.css?v=nocturne-v3" />
   </head>
   <body>
     <main class="shell">
@@ -224,18 +224,18 @@
                 title="Wrap long lines"
               >Wrap</button>
               <div class="tree-actions" role="group" aria-label="Tree actions" data-view-scope="tree">
-                <button id="treeExpandAll" type="button">Expand all</button>
-                <button id="treeCollapseAll" type="button">Collapse all</button>
+                <button id="treeExpandAll" type="button" title="Expand all" aria-label="Expand all"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 9 5-5 5 5"/><path d="m7 15 5 5 5-5"/></svg><span class="compact-label">Expand all</span></button>
+                <button id="treeCollapseAll" type="button" title="Collapse all" aria-label="Collapse all"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 4 5 5 5-5"/><path d="m7 20 5-5 5 5"/></svg><span class="compact-label">Collapse all</span></button>
               </div>
               <span id="typeBadge" class="type-badge" aria-live="polite">Waiting for payload</span>
             </div>
             <span class="strip-divider" aria-hidden="true"></span>
             <div class="actions" role="group" aria-label="Formatting actions">
               <button id="clearBtn" class="danger" type="button">Clear</button>
-              <button id="copyBtn" class="secondary" type="button" title="Copy the full payload, including content not shown in a large preview."><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span>Copy</span></button>
+              <button id="copyBtn" class="secondary" type="button" aria-label="Copy" title="Copy the full payload, including content not shown in a large preview."><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><span class="copy-label">Copy</span></button>
               <button id="pasteFormatBtn" class="primary" type="button" title="Paste from clipboard and format. Ctrl/Cmd + Enter to format the current payload.">
                 <span class="button-spinner" aria-hidden="true"></span>
-                <span class="button-label">Paste and format</span>
+                <span class="button-label">Paste<span class="format-words"> and format</span></span>
               </button>
             </div>
           </div>
@@ -316,7 +316,7 @@
       </footer>
     </main>
 
-    <script type="module" src="./app.js?v=nocturne-v5"></script>
-    <script type="module" src="./ui-controls.js?v=tree-actions-visible-v1"></script>
+    <script type="module" src="./src/app.js?v=nocturne-v6"></script>
+    <script type="module" src="./src/ui-controls.js?v=tree-actions-visible-v1"></script>
   </body>
 </html>
