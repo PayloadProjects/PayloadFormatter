@@ -8,6 +8,7 @@ import { createInspector, selectionFromTreeNode } from './panels/inspector.js';
 import { createMinimap } from './editor/minimap.js';
 import { createIssueHelper } from './editor/issue-helper.js';
 import { guessMode } from './format/payload-diagnose.js';
+import { PAYLOAD_COMPARE } from './feature-flags.js';
 import {
   getTabId,
   touchTabHeartbeat,
@@ -128,7 +129,7 @@ const treeController = createTreeController({
 createTextSearch({
   editor: syntaxEditor,
   editorHost: editor,
-  isTextView: () => !treeController.isTree(),
+  isTextView: () => !treeController.isTree() && root.dataset.compare !== 'on',
   isPreview: () => inLargeMode(),
 });
 
@@ -187,6 +188,10 @@ startHeartbeat();
 // synchronously from sessionStorage so the UI is never blocked on it.
 // Storage maintenance (closed tabs' leftovers, the size budget) runs after.
 hydrateWindowHistories().then(runStorageMaintenance);
+// Payload comparison sits behind a flag: with 'N' its code is never downloaded.
+if (PAYLOAD_COMPARE === 'Y') {
+  loadCompare().catch(() => setStatus('Compare could not load. Refresh the page to try again.', 'warning'));
+}
 refreshUi();
 treeController.refresh();
 
@@ -681,6 +686,42 @@ async function loadCurrentText(win) {
     saveHistoryFor(win);
   }
   return '';
+}
+
+async function loadCompare() {
+  const stylesheet = document.createElement('link');
+  stylesheet.rel = 'stylesheet';
+  stylesheet.href = new URL('./styles/compare.css', import.meta.url).href;
+  document.head.append(stylesheet);
+  const { initCompare } = await import('./compare/compare-feature.js');
+  initCompare({
+    host: document.querySelector('#editorFrame'),
+    windows: () => windowManager.windows.map((win) => ({ id: win.id, name: win.name })),
+    activeWindowId: () => activeWindow.id,
+    // The full payload of any window, including one kept only in storage.
+    readWindow: async (id) => {
+      const win = windowManager.getWindow(id);
+      if (!win) return '';
+      if (win === activeWindow) return getPayloadText();
+      return residentCurrentText(win) ?? await loadCurrentText(win);
+    },
+    // A window's earlier payloads, oldest first, without the one it shows now.
+    windowHistory: (id) => {
+      const win = windowManager.getWindow(id);
+      if (!win?.history) return [];
+      const current = win.history.currentEntry();
+      return win.history.entries()
+        .filter((entry) => entry.chars > 0 && entry !== current)
+        .map((entry) => ({ id: entry.id, chars: entry.chars, preview: entry.preview || '' }));
+    },
+    readHistoryEntry: async (id, entryId) => {
+      const entry = windowManager.getWindow(id)?.history.entries().find((item) => item.id === entryId);
+      if (!entry) return '';
+      return entry.text ?? await loadEntry(entry.id) ?? '';
+    },
+    setStatus,
+    nextPaint,
+  });
 }
 
 function startHeartbeat() {
