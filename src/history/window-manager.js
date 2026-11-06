@@ -2,7 +2,8 @@
 // user can juggle payloads without switching browser tabs. Pure model, no DOM:
 // each window owns its payload and its own paste history (like a browser tab
 // owns its navigation history). Persistence of payloads lives in app.js; the
-// manager only serializes the lightweight list (ids, names, active, counter).
+// manager only serializes the lightweight list (ids, names, the view each is
+// in, active, counter).
 import { createPayloadHistory } from './payload-history.js';
 
 export const MAX_WINDOWS = 20;
@@ -57,6 +58,10 @@ export function createWindowManager() {
       payload: text,
       history: createPayloadHistory(),
       ui: freshUiState(),
+      // The view this window was left in: Text or Tree, and whether Compare is
+      // open over it. A new window starts in Text.
+      view: 'text',
+      comparing: false,
     };
     if (text) win.history.push(text);
     windows.push(win);
@@ -65,8 +70,9 @@ export function createWindowManager() {
   }
 
   // Rebuilds one window from persisted metadata; payloads are restored by
-  // the caller through the payload argument.
-  function restoreWindow(id, name, payload = '') {
+  // the caller through the payload argument. Lists saved before windows had
+  // their own view leave view and comparing unset for the caller to settle.
+  function restoreWindow(id, name, payload = '', { view, comparing } = {}) {
     if (getWindow(id) || windows.length >= MAX_WINDOWS) return null;
     const text = String(payload ?? '');
     const win = {
@@ -75,6 +81,8 @@ export function createWindowManager() {
       payload: text,
       history: createPayloadHistory(),
       ui: freshUiState(),
+      view: view === 'tree' || view === 'text' ? view : null,
+      comparing: typeof comparing === 'boolean' ? comparing : undefined,
     };
     if (text) win.history.push(text);
     windows.push(win);
@@ -131,7 +139,7 @@ export function createWindowManager() {
 
   function toJSON() {
     return {
-      windows: windows.map((win) => ({ id: win.id, name: win.name })),
+      windows: windows.map((win) => ({ id: win.id, name: win.name, view: win.view, comparing: win.comparing })),
       activeId,
       counter,
     };

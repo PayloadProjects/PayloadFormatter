@@ -659,6 +659,25 @@ compare.windowChanged('w1');
 await wait(80);
 assert.ok(left.view.state.doc.toString().includes('for w1 left'), 'closing another window leaves this comparison alone');
 
+// Each window remembers whether it was in Compare.
+compare.windowChanged('w2', false);
+await wait(60);
+assert.equal(root.dataset.compare, undefined, 'a window left in Text comes back in Text');
+assert.equal(toggle.getAttribute('aria-pressed'), 'false');
+assert.equal(host.querySelector('#text').getAttribute('aria-pressed'), 'true', 'and Text reads as active');
+compare.windowChanged('w1', true);
+await wait(80);
+assert.equal(root.dataset.compare, 'on', 'a window left in Compare comes back in Compare');
+assert.equal(toggle.getAttribute('aria-pressed'), 'true');
+assert.equal(host.querySelector('#text').getAttribute('aria-pressed'), 'false', 'with only Compare active');
+assert.ok(left.view.state.doc.toString().includes('for w1 left'), 'showing its own comparison');
+host.querySelector('#text').setAttribute('aria-pressed', 'true');
+compare.windowChanged('w2', true);
+await wait(80);
+assert.equal(host.querySelector('#text').getAttribute('aria-pressed'), 'false', 'going from one Compare window to another keeps one view active');
+compare.windowChanged('w1', true);
+await wait(80);
+
 document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
 assert.equal(root.dataset.compare, undefined, 'Esc leaves Compare');
 toggle.click();

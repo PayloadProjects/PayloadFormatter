@@ -29,6 +29,7 @@ A fast JSON and XML formatter that runs entirely in your browser. Paste a payloa
 **Keep your work**
 
 - Up to 20 windows: named tabs you can rename and reorder
+- Each window remembers its own view, so one can stay in Compare while another stays in Text or Tree, including after a refresh
 - Each window has its own Back/Forward history of up to 100 payloads, which survives a refresh
 - History is compressed in your browser's storage, up to 500 MB in total; the oldest payloads are removed first once that is full
 

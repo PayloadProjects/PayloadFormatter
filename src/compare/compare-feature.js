@@ -196,7 +196,7 @@ export function describeResult({ counts, identical }) {
   return parts.join(' · ');
 }
 
-export function initCompare({ host, storageScope = 'tab', windows, activeWindowId, readWindow, windowHistory, readHistoryEntry, setStatus, nextPaint }) {
+export function initCompare({ host, storageScope = 'tab', windows, activeWindowId, readWindow, windowHistory, readHistoryEntry, setStatus, nextPaint, windowComparing, onViewChange }) {
   const root = document.documentElement;
   const viewToggle = host.querySelector('.view-toggle');
   const strip = host.querySelector('.editor-strip');
@@ -1677,8 +1677,16 @@ export function initCompare({ host, storageScope = 'tab', windows, activeWindowI
     scheduleSave();
   }
 
-  function windowChanged(id) {
-    if (active && id !== currentWindow) switchTo(id);
+  // Each window remembers whether it was in Compare. Left out, the view stays.
+  function windowChanged(id, comparing = active) {
+    if (!comparing) {
+      close();
+    } else if (!active) {
+      open();
+    } else {
+      takeOverViewButtons();
+      if (id !== currentWindow) switchTo(id);
+    }
   }
 
   function windowClosed(id) {
@@ -1719,15 +1727,22 @@ export function initCompare({ host, storageScope = 'tab', windows, activeWindowI
   let previousView = null;
   const otherViewButtons = () => [...viewToggle.querySelectorAll('button')].filter((button) => button !== toggleBtn);
 
+  // Only one view reads as active; the one left behind comes back on close.
+  function takeOverViewButtons() {
+    previousView = otherViewButtons().find((button) => button.getAttribute('aria-pressed') === 'true') || previousView;
+    for (const button of otherViewButtons()) button.setAttribute('aria-pressed', 'false');
+    toggleBtn.setAttribute('aria-pressed', 'true');
+  }
+
   async function open() {
     if (active) return;
+    // Told before Compare covers the view, so what's under it can be noted.
+    onViewChange?.(true);
     active = true;
     root.dataset.compare = 'on';
     host.dataset.compare = 'on';
-    // Only one view reads as active; the one left behind comes back on close.
-    previousView = otherViewButtons().find((button) => button.getAttribute('aria-pressed') === 'true') || null;
-    previousView?.setAttribute('aria-pressed', 'false');
-    toggleBtn.setAttribute('aria-pressed', 'true');
+    previousView = null;
+    takeOverViewButtons();
     // A message about the view being left doesn't apply here.
     setStatus('');
     await restoring;
@@ -1766,6 +1781,7 @@ export function initCompare({ host, storageScope = 'tab', windows, activeWindowI
     if (!otherViewButtons().some((button) => button.getAttribute('aria-pressed') === 'true')) previousView?.setAttribute('aria-pressed', 'true');
     for (const menu of menus) menu.open = false;
     scheduleSave();
+    onViewChange?.(false);
   }
 
   toggleBtn.addEventListener('click', () => { if (active) close(); else open(); });
@@ -1830,7 +1846,7 @@ export function initCompare({ host, storageScope = 'tab', windows, activeWindowI
   new MutationObserver(() => { if (active) drawMap(); }).observe(root, { attributes: true, attributeFilter: ['data-theme'] });
 
   // Came back from a reload with Compare open: open it again.
-  restoring.then((reopen) => { if (reopen) open(); });
+  restoring.then((reopen) => { if (windowComparing?.(activeWindowId()) ?? reopen) open(); });
 
   return {
     open,

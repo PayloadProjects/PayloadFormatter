@@ -121,7 +121,13 @@ const treeController = createTreeController({
     treeSelection = selectionFromTreeNode(node);
     if (treeController?.isTree()) syncSelection();
   },
-  onViewChange: () => syncSelection(),
+  onViewChange: (view) => {
+    if (activeWindow) {
+      activeWindow.view = view;
+      persistWindowList();
+    }
+    syncSelection();
+  },
 });
 
 // The strip's text search box. It follows edits and payload swaps on its
@@ -514,7 +520,7 @@ function restoreWindows() {
   let restored = false;
   if (meta && Array.isArray(meta.windows) && meta.windows.length) {
     for (const item of meta.windows) {
-      windowManager.restoreWindow(item.id, item.name, readWindowDraft(item.id));
+      windowManager.restoreWindow(item.id, item.name, readWindowDraft(item.id), item);
     }
     if (Number.isFinite(meta.counter)) windowManager.setCounter(meta.counter);
     restored = windowManager.setActive(meta.activeId) && windowManager.size > 0;
@@ -534,6 +540,10 @@ function restoreWindows() {
   }
   activeWindow = windowManager.getActive();
   history = activeWindow.history;
+  // A fresh tab, or a list saved before windows had their own view, keeps the
+  // view the tab was last in.
+  if (!restored || !activeWindow.view) activeWindow.view = treeController.isTree() ? 'tree' : 'text';
+  treeController.showView(activeWindow.view);
   // Drafts are capped below the large-payload threshold, so a restored payload
   // always fits the plain editor; the guard below is insurance regardless.
   const text = activeWindow.payload || '';
@@ -725,6 +735,13 @@ async function loadCompare() {
     },
     setStatus,
     nextPaint,
+    windowComparing: (id) => windowManager.getWindow(id)?.comparing,
+    onViewChange: (comparing) => {
+      // Compare is about to cover the tree: note where it was left.
+      if (comparing && !activeWindow.comparing) stashTreeUi(activeWindow);
+      activeWindow.comparing = comparing;
+      persistWindowList();
+    },
   });
 }
 
@@ -845,7 +862,8 @@ async function activateWindow(id, { stash = true } = {}) {
     historyTimer = 0;
     applyHistoryUpdate();
     stashTextUi(activeWindow);
-    stashTreeUi(activeWindow);
+    // Under Compare the tree is hidden; it was noted when Compare opened.
+    if (!activeWindow.comparing) stashTreeUi(activeWindow);
     const text = getPayloadText();
     persistPayloadFor(activeWindow, text, inLargeMode());
     // The flush above made the history's current entry the visible text, so
@@ -879,11 +897,18 @@ async function activateWindow(id, { stash = true } = {}) {
     }
   }
   next.payload = null;
+  // Each window comes back in the view it was left in. Compare must be off
+  // before the editor restores its scroll, and only opens once the window's
+  // payload is in place, because it reads it.
+  next.view ??= 'text';
+  treeController.showView(next.view);
+  if (!next.comparing) compareView?.windowChanged(next.id, false);
   setPayloadText(text || '', { treeRestore: next.ui.tree });
   restoreTextUi(next);
+  syncSelection();
   syncHistoryNav();
+  if (next.comparing) compareView?.windowChanged(next.id, true);
   setStatus(`Switched to ${next.name}.`, 'success');
-  compareView?.windowChanged(next.id);
 }
 
 function createNewWindow() {
