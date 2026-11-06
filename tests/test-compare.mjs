@@ -86,6 +86,8 @@ assert.ok(Date.now() - started < 20000, 'reversing every line does not hang');
 // --- Normalizing keeps values exact ----------------------------------------------
 assert.equal(detectMode('{"a":1}'), 'json');
 assert.equal(detectMode('<a/>'), 'xml');
+assert.equal(detectMode('&lt;a&gt;&lt;b&gt;1&lt;/b&gt;&lt;/a&gt;'), 'xml', 'entity-encoded XML is recognised');
+assert.equal(detectMode('&lt;3 you'), null, 'but ordinary text with an entity is not');
 const exact = normalizePayload('{"big":12345678901234567890,"price":1.10,"e":1E5,"s":"\\u00e9"}');
 assert.equal(exact.mode, 'json');
 for (const piece of ['12345678901234567890', '1.10', '1E5', '\\u00e9']) {
@@ -124,6 +126,13 @@ for (const [text, mode] of layoutOnly) {
 }
 assert.ok(normalizePayload('<a><b></b></a>').text.includes('<b></b>'), 'an empty element is not shortened');
 assert.ok(formatXmlBestEffort('<a><b></b></a>').formatted.includes('<b/>'), 'the main formatter behaves as before');
+const decodedXml = formatXmlBestEffort('&lt;a x=&quot;1&quot;&gt;&lt;b&gt;1 &amp;amp; 2&lt;/b&gt;&lt;/a&gt;');
+assert.equal(decodedXml.valid, true, 'the main formatter decodes entity-encoded XML');
+assert.ok(decodedXml.formatted.includes('<b>1 &amp; 2</b>'), 'one layer, so real entities survive');
+assert.ok(decodedXml.repairNote, 'and says it did');
+const encodedText = '&lt;a&gt;&lt;b&gt;1&lt;/b&gt;&lt;/a&gt;';
+assert.equal(normalizePayload(encodedText).text, encodedText, 'Compare keeps it exactly as pasted');
+assert.equal(normalizePayload(encodedText).status, 'kept');
 
 // The checks themselves catch real changes.
 assert.equal(sameJsonContent('{"a":1,}', '{"a":1}'), false);
@@ -217,6 +226,14 @@ assert.equal(pathOf('"B"'), '$.order.items[1].sku');
 assert.equal(pathOf('"y"'), '$.order.items[1].tags[1]');
 assert.equal(pathOf('"note"'), '$.order.note');
 assert.equal(jsonPathAt((i) => pathLines[i], 0), '$');
+assert.equal(jsonPathAt((i) => pathLines[i], pathLines.findIndex((line) => line.trim() === ']')), '$.order.items[1].tags', 'a closing bracket belongs to what it closes');
+const oddKey = pretty({ 'a-b c': { x: 1 } }).split('\n');
+assert.equal(jsonPathAt((i) => oddKey[i], 2), '$["a-b c"].x', 'keys that need quoting match the Text view\'s format');
+const longArray = pretty(Array.from({ length: 30000 }, (_, i) => ({ id: i, name: 'n' }))).split('\n');
+const lastId = longArray.lastIndexOf('    "id": 29999,');
+const walkStart = Date.now();
+assert.equal(jsonPathAt((i) => longArray[i], lastId), '$[29999].id', 'works at the bottom of a long array');
+assert.ok(Date.now() - walkStart < 500, 'and quickly enough for a caret move');
 const xmlLines = '<a>\n\t<b>\n\t\t<c>1</c>\n\t</b>\n</a>'.split('\n');
 assert.equal(xmlPathAt((i) => xmlLines[i], 2), '/a/b/c');
 
@@ -264,7 +281,12 @@ assert.equal(toggle.getAttribute('aria-pressed'), 'true');
 assert.equal(host.querySelector('#text').getAttribute('aria-pressed'), 'false', 'only one view reads as active');
 const { left, right } = compare.sides;
 assert.equal(left.select.value, 'w1', 'left starts on the active window');
-assert.equal(right.select.value, 'w2', 'right starts on the next window with content');
+assert.equal(right.select.value, 'edited', 'and the right starts open for you to fill');
+assert.equal(right.raw, '', 'nothing from another window appears on its own');
+right.select.value = 'w2';
+right.raw = payloads.w2;
+compare.compare({ normalize: true });
+await wait(60);
 assert.ok(left.view.state.doc.toString().includes('\n'), 'both sides are formatted');
 assert.ok(compare.result() && !compare.result().identical, 'a comparison ran');
 const summary = host.querySelector('.compare-summary');
@@ -369,7 +391,6 @@ assert.equal(left.nameText.textContent, 'Prod', 'a new name is trimmed and shown
 assert.equal(left.select.getAttribute('aria-label'), 'Prod payload', 'its labels follow');
 assert.match(left.empty.textContent, /Prod payload/);
 assert.equal(left.view.contentDOM.getAttribute('aria-label'), 'Prod payload', 'the editor label follows');
-assert.equal(JSON.parse(localStorage.getItem('payload-formatter:compare-options:v1')).leftName, 'Prod', 'the name is remembered');
 rename(left, 'Nope', 'Escape');
 assert.equal(left.name, 'Prod', 'Esc cancels');
 rename(right, 'UAT', 'Enter');
@@ -384,10 +405,6 @@ blurred.value = 'QA';
 blurred.dispatchEvent(new dom.window.Event('blur'));
 assert.equal(left.name, 'QA', 'clicking away saves, like window tabs');
 await wait(60);
-
-// A name saved earlier comes back; nothing else on the page is renamed.
-const restored = JSON.parse(localStorage.getItem('payload-formatter:compare-options:v1'));
-assert.deepEqual([restored.leftName, restored.rightName], ['QA', 'Prod']);
 
 // The app's page-wide shortcuts cannot reach the hidden main editor.
 let reachedApp = 0;
@@ -412,6 +429,8 @@ await setRaws('', '');
 assert.equal(summaryNow(), 'Paste two payloads to compare', 'two empty sides are not "No differences"');
 await setRaws('{"a":1}', '');
 assert.match(summaryNow(), /Waiting for the .* payload/);
+assert.equal(host.querySelector('.compare-position').textContent, '', 'nothing to step through yet');
+assert.equal(host.querySelector('.compare-nav button').disabled, true);
 await setRaws('{"a":1}', '<a>1</a>');
 assert.match(summaryNow(), /^JSON vs XML/, 'mixed payload types are called out');
 
@@ -476,6 +495,9 @@ input.value = ':3';
 input.dispatchEvent(new dom.window.Event('input'));
 input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
 assert.match(host.querySelector('.compare-search-count').textContent, /^Line 3/, ':3 goes to a line');
+input.value = ':abc';
+input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+assert.match(host.querySelector('.compare-search-count').textContent, /line number/, 'a bad line number says what to type');
 input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
 assert.equal(host.querySelector('.compare-search').hidden, true, 'Esc closes find');
 assert.equal(root.dataset.compare, 'on', 'without leaving Compare');
@@ -511,9 +533,55 @@ assert.match(host.querySelector('.compare-foot .compare-caret').textContent, /^L
 showBox.click();
 assert.equal(host.querySelector('.compare-detail').hidden, true);
 
-// Files open like a paste, and refuse what is too big.
+// Each pane has a path bar that follows its own cursor and the current difference.
+await setRaws(pretty({ a: { b: [1, 2] }, c: 1 }), pretty({ a: { b: [1, 3] }, c: 1 }));
+const crumbText = (side) => side.crumbs.textContent;
+const place = (side, needle) => {
+  const line = side.view.state.doc.toString().split('\n').findIndex((text) => text.includes(needle));
+  side.view.dispatch({ selection: { anchor: side.view.state.doc.line(line + 1).from } });
+};
+assert.equal(host.querySelectorAll('.compare-path').length, 2, 'one path bar per pane');
+place(left, '"c"');
+await wait(180);
+assert.equal(crumbText(left), '$›c');
+assert.equal(left.pathText, '$.c');
+assert.equal(left.copyPathBtn.disabled, false);
+assert.equal(crumbText(right), '$', 'each follows its own cursor');
+compare.step(1);
+assert.equal(left.pathText, '$.a.b[1]', 'and the current difference');
+assert.equal(right.pathText, '$.a.b[1]', 'on both sides');
+await setRaws('', '<r>\n\t<a>\n\t\t<b>1</b>\n\t</a>\n</r>');
+assert.equal(left.pathText, '');
+assert.equal(left.copyPathBtn.disabled, true, 'nothing to copy without a payload');
+assert.match(crumbText(left), /No payload/);
+place(right, '<b>');
+await wait(180);
+assert.equal(right.pathText, '/r/a/b', 'XML paths work too');
+await setRaws('plain text', 'plain text');
+assert.match(crumbText(left), /JSON and XML/);
+const formatToggle = [...host.querySelectorAll('.compare-options button')].find((button) => button.textContent === 'Format');
+formatToggle.click();
+await setRaws('{"a":{"b":1}}', '{"a":{"b":1}}');
+assert.match(crumbText(left), /Format this side/, 'a single unformatted line says what would help');
+assert.equal(left.pathText, '');
+formatToggle.click();
+await setRaws('{"a":1}', '{"a":2}');
+
+// Files open like a paste, and refuse what isn't text.
 const fileInput = host.querySelector('.compare-file');
 assert.equal(fileInput.type, 'file');
+const openFile = async (name, text) => {
+  Object.defineProperty(fileInput, 'files', { configurable: true, value: [{ name, size: text.length, text: async () => text }] });
+  fileInput.dispatchEvent(new dom.window.Event('change'));
+  await wait(60);
+};
+await setRaws('{"keep":1}', '{"keep":2}');
+await openFile('photo.png', 'PNG\u0000\u0001data');
+assert.match(statuses.at(-1), /binary/, 'a binary file is refused with a reason');
+assert.ok(left.raw.includes('keep'), 'and what was there stays');
+await openFile('data.json', '{"opened":true}');
+assert.equal(left.raw, '{"opened":true}', 'a text file opens');
+Object.defineProperty(fileInput, 'files', { configurable: true, value: [] });
 
 // Too large leaves nothing stale.
 left.raw = 'x'.repeat(30 * 1024 * 1024 + 1);
@@ -521,17 +589,71 @@ compare.compare({ normalize: true });
 assert.equal(host.querySelector('.compare-position').textContent, '', 'no old counter after refusing');
 assert.equal(host.querySelector('.compare-nav button').disabled, true);
 assert.match(left.meta.textContent, /^1 line/, 'and the line count is current');
+assert.doesNotMatch(left.crumbs.textContent, /No payload/, 'and the path bar is too');
 await setRaws('{"a":1}', '{"a":2}');
 
-// Going to a window leaves Compare, since it would otherwise hide that window.
-const tab = document.createElement('button');
-tab.className = 'window-tab-select';
-document.body.append(tab);
-tab.click();
-assert.equal(root.dataset.compare, undefined, 'a window tab leaves Compare');
-toggle.click();
-await wait(60);
-assert.equal(root.dataset.compare, 'on');
+// Each window has its own comparison.
+payloads.w1 = '{"own":"w1"}';
+payloads.w2 = '{"own":"w2"}';
+payloads.w3 = '{"own":"w3"}';
+await setRaws('{"pasted":"for w1 left"}', '{"pasted":"for w1 right"}');
+left.select.value = 'edited';
+right.select.value = 'edited';
+left.nameBtn.click();
+const firstName = host.querySelector('.compare-rename');
+firstName.value = 'Prod';
+firstName.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+compare.step(1);
+const stepped = host.querySelector('.compare-position').textContent;
+compare.windowChanged('w2');
+await wait(80);
+assert.equal(root.dataset.compare, 'on', 'a window tab keeps you in Compare');
+assert.equal(compare.currentWindow(), 'w2');
+assert.ok(left.view.state.doc.toString().includes('"w2"'), 'a new window starts from its own payload');
+assert.equal(right.view.state.doc.length, 0, 'with the right side open');
+assert.ok(!right.raw && !left.raw.includes('w1'), 'nothing carries over from the other window');
+assert.equal(left.name, 'Left', 'and its sides have their own names');
+assert.equal(left.select.value, 'w2');
+await setRaws('{"pasted":"for w2 left"}', '{"pasted":"for w2 right"}');
+left.select.value = 'edited';
+right.select.value = 'edited';
+
+compare.windowChanged('w1');
+await wait(80);
+assert.ok(left.view.state.doc.toString().includes('for w1 left'), 'coming back shows that window\'s comparison');
+assert.ok(right.view.state.doc.toString().includes('for w1 right'));
+assert.equal(left.name, 'Prod', 'with its names');
+assert.equal(host.querySelector('.compare-position').textContent, stepped, 'and the difference you were on');
+
+// Quick switching ends on the window you chose last.
+compare.windowChanged('w2');
+compare.windowChanged('w3');
+compare.windowChanged('w2');
+await wait(100);
+assert.ok(left.view.state.doc.toString().includes('for w2 left'), 'the last switch wins');
+compare.windowChanged('w3');
+await wait(80);
+assert.ok(left.view.state.doc.toString().includes('"w3"'), 'a window passed through keeps its own payload, not another window\'s');
+assert.ok(!right.raw, 'and nothing leaks into its right side');
+compare.windowChanged('w2');
+await wait(80);
+assert.ok(left.view.state.doc.toString().includes('for w2 left'));
+
+// A side linked to a window follows it, and closing that window leaves no error.
+compare.windowChanged('w3');
+await wait(80);
+assert.equal(left.select.value, 'w3');
+payloads.w3 = '{"own":"w3 changed"}';
+compare.windowChanged('w1');
+await wait(80);
+compare.windowChanged('w3');
+await wait(80);
+assert.ok(left.view.state.doc.toString().includes('w3 changed'), 'a linked side reads the window again');
+compare.windowClosed('w3');
+compare.windowChanged('w1');
+await wait(80);
+assert.ok(left.view.state.doc.toString().includes('for w1 left'), 'closing another window leaves this comparison alone');
+
 document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
 assert.equal(root.dataset.compare, undefined, 'Esc leaves Compare');
 toggle.click();

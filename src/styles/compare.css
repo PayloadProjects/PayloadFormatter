@@ -114,6 +114,8 @@ html[data-compare="on"] .status-meta { display: none; }
 .compare-pane.is-dropping { outline: 2px dashed var(--accent); outline-offset: -3px; }
 .compare-file { display: none; }
 .compare-foot { flex: none; min-height: 26px; min-width: 0; background: var(--strip-bg); display: flex; align-items: center; gap: 10px; padding: 2px 10px; border-top: 1px solid var(--divider); font-size: 12px; }
+.compare-path { min-height: 30px; padding: 2px 6px 2px 10px; }
+.compare-path-note { color: var(--muted); font-size: 12px; }
 .compare-caret { flex: 0 1 auto; min-width: 0; overflow: hidden; color: var(--soft); text-overflow: ellipsis; white-space: nowrap; }
 .compare-pane + .compare-pane { border-left: 1px solid var(--divider); }
 .compare-head { min-height: 36px; min-width: 0; background: var(--strip-bg); display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-bottom: 1px solid var(--divider); }

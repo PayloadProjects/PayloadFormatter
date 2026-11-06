@@ -212,6 +212,7 @@ editor.addEventListener('input', () => {
       if (pastePending) {
         pastePending = false;
         pushHistory();
+        setStatus('Pasted. Ctrl/Cmd + Enter formats it.');
       } else {
         scheduleHistoryUpdate();
       }
@@ -688,13 +689,16 @@ async function loadCurrentText(win) {
   return '';
 }
 
+let compareView = null;
+
 async function loadCompare() {
   const stylesheet = document.createElement('link');
   stylesheet.rel = 'stylesheet';
   stylesheet.href = new URL('./styles/compare.css', import.meta.url).href;
   document.head.append(stylesheet);
   const { initCompare } = await import('./compare/compare-feature.js');
-  initCompare({
+  compareView = initCompare({
+    storageScope: tabId,
     host: document.querySelector('#editorFrame'),
     windows: () => windowManager.windows.map((win) => ({ id: win.id, name: win.name })),
     activeWindowId: () => activeWindow.id,
@@ -879,6 +883,7 @@ async function activateWindow(id, { stash = true } = {}) {
   restoreTextUi(next);
   syncHistoryNav();
   setStatus(`Switched to ${next.name}.`, 'success');
+  compareView?.windowChanged(next.id);
 }
 
 function createNewWindow() {
@@ -905,6 +910,7 @@ function closeWindowById(id) {
     return;
   }
   clearWindowDraft(target.id);
+  compareView?.windowClosed(target.id);
   recentWindowIds = recentWindowIds.filter((recentId) => recentId !== target.id);
   // Drop its persisted history too: closing a window forgets its datasets.
   trackSave(deleteWindowHistory(tabId, target.id));

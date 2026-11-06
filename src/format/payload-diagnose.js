@@ -64,6 +64,61 @@ export function applyFix(text, fix) {
   return out + text.slice(cursor);
 }
 
+// The same mistake usually repeats through a payload, so its fix covers them all
+// in one click. Walks the text once, skipping over double-quoted strings.
+function everyDoubleQuoteFix(text) {
+  const changes = [];
+  const n = text.length;
+  let i = 0;
+  while (i < n) {
+    const ch = text[i];
+    if (ch === '"' || ch === "'") {
+      let j = i + 1;
+      while (j < n && text[j] !== ch) j += text[j] === '\\' ? 2 : 1;
+      if (j >= n) break;
+      if (ch === "'") {
+        const inner = text.slice(i + 1, j).replace(/\\'/g, "'").replace(/(^|[^\\])"/g, '$1\\"');
+        changes.push({ from: i, to: j + 1, insert: `"${inner}"` });
+      }
+      i = j + 1;
+      continue;
+    }
+    i += 1;
+  }
+  return changes;
+}
+
+function everyUnquotedKeyFix(text) {
+  const changes = [];
+  const n = text.length;
+  let i = 0;
+  let before = '';
+  while (i < n) {
+    const ch = text[i];
+    if (ch === '"' || ch === "'") {
+      let j = i + 1;
+      while (j < n && text[j] !== ch) j += text[j] === '\\' ? 2 : 1;
+      i = j + 1;
+      before = ch;
+      continue;
+    }
+    if (before === '{' || before === ',') {
+      const word = /^[-+\w$.]+/.exec(text.slice(i, i + 200))?.[0];
+      if (word) {
+        let k = i + word.length;
+        while (k < n && /\s/.test(text[k])) k += 1;
+        if (text[k] === ':') changes.push({ from: i, to: i + word.length, insert: `"${word}"` });
+        i += word.length;
+        before = word.at(-1);
+        continue;
+      }
+    }
+    if (!/\s/.test(ch)) before = ch;
+    i += 1;
+  }
+  return changes;
+}
+
 function snippet(text) {
   const flat = String(text).replace(/\s+/g, ' ').trim();
   return flat.length > SNIPPET_CHARS ? `${flat.slice(0, SNIPPET_CHARS - 1)}…` : flat;
@@ -398,7 +453,7 @@ export function diagnoseJson(text) {
           hint: `Use "…" instead of '…'.`,
           from: start,
           to: end,
-          fix: { label: 'Use double quotes', changes: [{ from: start, to: end, insert: `"${inner}"` }] },
+          fix: { label: 'Use double quotes', changes: everyDoubleQuoteFix(text) },
         });
       }
 
@@ -454,7 +509,7 @@ export function diagnoseJson(text) {
           hint: `Write "${raw}" instead of ${raw}.`,
           from: i,
           to: end,
-          fix: { label: 'Add the quotes', changes: [{ from: i, to: end, insert: `"${raw}"` }] },
+          fix: { label: 'Add the quotes', changes: everyUnquotedKeyFix(text) },
         });
       }
       const problem = checkValueAllowed(i);
@@ -506,7 +561,7 @@ export function diagnoseJson(text) {
           from: i,
           to: end,
           fix: text[k] === ':'
-            ? { label: 'Add the quotes', changes: [{ from: i, to: end, insert: `"${word}"` }] }
+            ? { label: 'Add the quotes', changes: everyUnquotedKeyFix(text) }
             : undefined,
         });
       }

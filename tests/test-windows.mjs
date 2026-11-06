@@ -17,7 +17,7 @@ const [html, css, app, build, pkg] = await Promise.all(
   const third = manager.newWindow('  ');
   assert.equal(first.name, 'Window 1');
   assert.equal(second.name, 'Custom');
-  assert.equal(third.name, 'Window 3', 'blank names fall back to the numbered default');
+  assert.equal(third.name, 'Window 2', 'blank names fall back to the lowest free number');
   assert.notEqual(first.id, second.id, 'ids are unique');
   assert.equal(manager.size, 3);
   assert.equal(manager.getActive().id, first.id, 'the first window starts active');

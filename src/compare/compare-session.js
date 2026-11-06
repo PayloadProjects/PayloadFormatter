@@ -1,5 +1,6 @@
-// Remembers the two sides across a reload, in this browser only, the same way the
-// app keeps window history. Storage failing just means nothing is restored.
+// Remembers each window's comparison across a reload, in this browser only, the
+// same way the app keeps window history. Storage failing just means nothing is
+// restored.
 const DB_NAME = 'payload-formatter-compare';
 const STORE = 'session';
 
@@ -12,13 +13,13 @@ function openDb() {
   });
 }
 
-export async function saveSession(key, value) {
+async function write(run) {
   if (typeof indexedDB === 'undefined') return;
   try {
     const db = await openDb();
     await new Promise((resolve, reject) => {
       const tx = db.transaction(STORE, 'readwrite');
-      tx.objectStore(STORE).put(value, key);
+      run(tx.objectStore(STORE));
       tx.oncomplete = resolve;
       tx.onerror = () => reject(tx.error);
     });
@@ -28,19 +29,36 @@ export async function saveSession(key, value) {
   }
 }
 
+export function saveSession(key, value) {
+  return write((store) => store.put(value, key));
+}
+
+export function deleteSession(key) {
+  return write((store) => store.delete(key));
+}
+
+// Every saved record, as { key: value }.
 export async function loadSession() {
-  if (typeof indexedDB === 'undefined') return null;
+  if (typeof indexedDB === 'undefined') return {};
   try {
     const db = await openDb();
-    const read = (key) => new Promise((resolve, reject) => {
-      const request = db.transaction(STORE).objectStore(STORE).get(key);
-      request.onsuccess = () => resolve(request.result ?? null);
+    const entries = await new Promise((resolve, reject) => {
+      const found = {};
+      const request = db.transaction(STORE).objectStore(STORE).openCursor();
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (!cursor) {
+          resolve(found);
+          return;
+        }
+        found[cursor.key] = cursor.value;
+        cursor.continue();
+      };
       request.onerror = () => reject(request.error);
     });
-    const [state, left, right] = await Promise.all([read('state'), read('left'), read('right')]);
     db.close();
-    return { state, left, right };
+    return entries;
   } catch (_) {
-    return null;
+    return {};
   }
 }
