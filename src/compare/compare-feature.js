@@ -33,9 +33,10 @@ import {
 import { editorTheme, highlightStyle } from '../editor/text-editor.js';
 import { compareTexts, inlineDiff, KIND } from './compare-diff.js';
 import { detectMode, normalizePayload } from './compare-normalize.js';
-import { jsonPathAt, xmlPathAt } from './compare-path.js';
+import { jsonPathSegments, xmlPathSegments } from './compare-path.js';
+import { pathString } from '../panels/inspector.js';
 import { unifiedDiff } from './compare-export.js';
-import { loadSession, saveSession } from './compare-session.js';
+import { deleteSession, loadSession, saveSession } from './compare-session.js';
 
 const OPTIONS_KEY = 'payload-formatter:compare-options:v1';
 const LINE_HEIGHT = 24;
@@ -45,6 +46,8 @@ const RECOMPARE_DELAY_MS = 300;
 const SEARCH_DELAY_MS = 200;
 const CARET_DELAY_MS = 120;
 const SAVE_DELAY_MS = 800;
+// Comparisons saved by browser tabs that are gone are dropped after this long.
+const STALE_SESSION_MS = 24 * 3600 * 1000;
 const MAX_COMPARE_CHARS = 30 * 1024 * 1024;
 const MAX_MATCHES_PER_SIDE = 50000;
 const MAX_DETAIL_CHARS = 20000;
@@ -67,8 +70,6 @@ const STATUS = {
 const DEFAULT_NAMES = { left: 'Left', right: 'Right' };
 const MAX_NAME_LENGTH = 40;
 const DEFAULT_OPTIONS = {
-  leftName: DEFAULT_NAMES.left,
-  rightName: DEFAULT_NAMES.right,
   format: true,
   sortKeys: false,
   sortArrays: false,
@@ -195,7 +196,7 @@ export function describeResult({ counts, identical }) {
   return parts.join(' · ');
 }
 
-export function initCompare({ host, windows, activeWindowId, readWindow, windowHistory, readHistoryEntry, setStatus, nextPaint }) {
+export function initCompare({ host, storageScope = 'tab', windows, activeWindowId, readWindow, windowHistory, readHistoryEntry, setStatus, nextPaint }) {
   const root = document.documentElement;
   const viewToggle = host.querySelector('.view-toggle');
   const strip = host.querySelector('.editor-strip');
@@ -218,6 +219,16 @@ export function initCompare({ host, windows, activeWindowId, readWindow, windowH
   let leader = null;
   const inlineCache = new Map();
   const expandedFolds = new Set();
+  // One comparison per window. Only one is on screen; the others are kept as
+  // what is needed to rebuild them, not as editors.
+  const windowStates = new Map();
+  let currentWindow = null;
+  // The window whose comparison the panes hold right now. It differs from
+  // currentWindow while a switch is loading, and only this one may be saved:
+  // otherwise one window's text could be stored under another's name.
+  let panesWindow = null;
+  let switchToken = 0;
+  let pendingRestore = null;
   const search = { query: '', caseSensitive: false, left: [], right: [], all: [], index: -1 };
 
   function readOptions() {
@@ -351,11 +362,12 @@ export function initCompare({ host, windows, activeWindowId, readWindow, windowH
     });
     return button;
   };
-  const copyMenu = makeMenu('Copy', 'Copy or download',
+  const copyMenu = makeMenu('Copy', 'Copy a side or the differences',
     copyAction('Copy left, as pasted', () => copyText(left.raw, `Copied ${left.name}.`)),
     copyAction('Copy right, as pasted', () => copyText(right.raw, `Copied ${right.name}.`)),
-    copyAction('Copy differences', () => copyText(diffText(), 'Copied the differences as a unified diff.')),
-    copyAction('Download differences (.diff)', () => downloadText(diffText(), 'comparison.diff')));
+    copyAction('Copy differences', () => copyText(diffText(), 'Copied the differences as a unified diff.')));
+    // Parked for now: download the differences as a .diff file.
+    // copyAction('Download differences (.diff)', () => downloadText(diffText(), 'comparison.diff')));
 
   const optionsGroup = el('div', { class: 'compare-options', role: 'group', 'aria-label': 'Compare options' },
     optionButton('format', 'Format', 'Add line breaks and indentation before comparing. Your data is never changed; turn off to see exactly what was pasted.'),
@@ -382,6 +394,8 @@ export function initCompare({ host, windows, activeWindowId, readWindow, windowH
     const meta = el('span', { class: 'compare-meta' });
     const status = el('span', { class: 'compare-status' });
     const caret = el('span', { class: 'compare-caret' });
+    const crumbs = el('span', { class: 'path-crumbs', role: 'note' });
+    const copyPathBtn = el('button', { type: 'button', class: 'path-copy', text: 'Copy path' });
     const pasteBtn = el('button', { type: 'button', class: 'strip-btn', text: 'Paste' });
     const fileInput = el('input', { type: 'file', class: 'compare-file', tabindex: '-1', 'aria-hidden': 'true' });
     const openBtn = el('button', { type: 'button', class: 'strip-btn', text: 'Open' });
@@ -392,10 +406,11 @@ export function initCompare({ host, windows, activeWindowId, readWindow, windowH
     const nameBtn = el('button', { type: 'button', class: 'compare-side' }, nameText);
     const pane = el('section', { class: 'compare-pane' },
       el('div', { class: 'compare-head' }, nameBtn, select, el('span', { class: 'compare-grow' }), pasteBtn, openBtn, fileInput, clearBtn),
+      el('div', { class: 'path-bar compare-path' }, crumbs, copyPathBtn),
       el('div', { class: 'compare-body' }, editorHost, empty),
       el('div', { class: 'compare-foot' }, caret, el('span', { class: 'compare-grow' }), meta, status));
     return {
-      key, name: '', nameBtn, nameText, pane, select, meta, status, statusKey: '', caret, caretTimer: 0, pasteBtn, openBtn, fileInput, clearBtn, editorHost, empty,
+      key, name: '', nameBtn, nameText, pane, select, meta, status, statusKey: '', caret, caretTimer: 0, crumbs, copyPathBtn, pathText: '', pasteBtn, openBtn, fileInput, clearBtn, editorHost, empty,
       raw: '', savedRaw: '', previous: null, mode: null, view: null, language: new Compartment(),
     };
   };
@@ -432,12 +447,6 @@ export function initCompare({ host, windows, activeWindowId, readWindow, windowH
     side.view?.dispatch({ effects: repaint.of(null) });
   }
 
-  function saveNames() {
-    options.leftName = left.name;
-    options.rightName = right.name;
-    saveOptions();
-  }
-
   function startRename(side) {
     const input = el('input', { type: 'text', class: 'compare-rename', maxlength: String(MAX_NAME_LENGTH), 'aria-label': `Rename the ${side.name} side` });
     input.value = side.name;
@@ -451,7 +460,7 @@ export function initCompare({ host, windows, activeWindowId, readWindow, windowH
       // Leaving the box blank goes back to the standard name.
       if (save) {
         applyName(side, input.value.trim() || DEFAULT_NAMES[side.key]);
-        saveNames();
+        scheduleSave();
       }
       input.replaceWith(side.nameBtn);
       if (refocus) side.nameBtn.focus();
@@ -468,7 +477,7 @@ export function initCompare({ host, windows, activeWindowId, readWindow, windowH
 
   for (const side of sides) {
     side.nameBtn.addEventListener('click', () => startRename(side));
-    applyName(side, String(options[`${side.key}Name`] || '').slice(0, MAX_NAME_LENGTH) || DEFAULT_NAMES[side.key]);
+    applyName(side, DEFAULT_NAMES[side.key]);
   }
 
   const mapCanvas = el('canvas', { class: 'compare-map-canvas' });
@@ -664,6 +673,8 @@ export function initCompare({ host, windows, activeWindowId, readWindow, windowH
         const target = otherSide(side);
         const targetLine = found.op.target + number - (side === left ? found.op.l : found.op.r);
         revealLine(target, targetLine);
+        showPath(side, number);
+        showPath(target, targetLine);
         setStatus(`Moved block: now at line ${(targetLine + 1).toLocaleString()} on ${target.name}.`);
         return true;
       },
@@ -834,6 +845,7 @@ export function initCompare({ host, windows, activeWindowId, readWindow, windowH
       refreshNavigable();
       updateMeta();
       paintLayout();
+      for (const side of sides) updateCaret(side);
       return;
     }
     summary.textContent = 'Comparing…';
@@ -896,14 +908,17 @@ export function initCompare({ host, windows, activeWindowId, readWindow, windowH
     if (normalized) {
       normalized.forEach((entry, index) => {
         setDocument(sides[index], entry.text, entry.mode);
-        showStatus(sides[index], entry.status);
+        // Text you edited stays marked as edited when you come back to it.
+        showStatus(sides[index], pendingRestore?.edited[sides[index].key] ? 'edited' : entry.status);
       });
     }
+    const restore = pendingRestore;
+    pendingRestore = null;
     result = next;
     buildRows();
     inlineCache.clear();
     expandedFolds.clear();
-    currentDifference = -1;
+    currentDifference = restore && restore.difference < next.differences.length ? restore.difference : -1;
     summary.textContent = summaryText(next);
     summary.title = summary.textContent;
     summary.dataset.tone = next.identical && sides.every((side) => side.view.state.doc.length) ? 'same' : 'different';
@@ -912,6 +927,15 @@ export function initCompare({ host, windows, activeWindowId, readWindow, windowH
     runSearch();
     paintLayout();
     syncScroll();
+    if (restore?.topLine > 1) {
+      // Back where you left this window. A line number holds at any file size,
+      // and the editor places it once the new text has been measured.
+      const side = sides.find((candidate) => candidate.key === restore.leader) || left;
+      const { doc } = side.view.state;
+      leader = side;
+      side.view.dispatch({ effects: EditorView.scrollIntoView(doc.line(Math.min(restore.topLine, doc.lines)).from, { y: 'start' }) });
+      side.view.requestMeasure({ read: () => null, write: () => queueMicrotask(syncScroll) });
+    }
     updateDetail();
     for (const side of sides) updateCaret(side);
     scheduleSave();
@@ -920,7 +944,8 @@ export function initCompare({ host, windows, activeWindowId, readWindow, windowH
   // Differences the Show menu keeps, in order.
   function refreshNavigable() {
     navigable = [];
-    if (result) {
+    // With a side still empty there is nothing to step between yet.
+    if (result && sides.every((side) => side.view.state.doc.length)) {
       const { differences, ops } = result;
       differences.forEach((difference, index) => {
         for (let at = difference.first; at <= difference.last; at += 1) {
@@ -1047,18 +1072,52 @@ export function initCompare({ host, windows, activeWindowId, readWindow, windowH
     const { state } = side.view;
     if (!state.doc.length) {
       side.caret.textContent = '';
+      pathNote(side, 'No payload');
       return;
     }
     const { head } = state.selection.main;
     const line = state.doc.lineAt(head);
-    let text = `Ln ${line.number.toLocaleString()}, Col ${(head - line.from + 1).toLocaleString()}`;
-    if (['layout', 'sorted', 'sorted-arrays', 'layout-no-sort'].includes(side.statusKey)) {
-      const getLine = (index) => state.doc.line(index + 1).text;
-      const path = side.mode === 'json' ? jsonPathAt(getLine, line.number - 1) : side.mode === 'xml' ? xmlPathAt(getLine, line.number - 1) : '';
-      if (path) text += ` · ${path}`;
+    side.caret.textContent = `Ln ${line.number.toLocaleString()}, Col ${(head - line.from + 1).toLocaleString()}`;
+    showPath(side, line.number - 1);
+  }
+
+  // The path bar: the same look and path format as the Text view's. Both panes
+  // always show the bar, so their rows stay level with each other.
+  function pathNote(side, text) {
+    side.pathText = '';
+    side.crumbs.replaceChildren(el('span', { class: 'compare-path-note', text }));
+    side.crumbs.removeAttribute('aria-label');
+    side.copyPathBtn.disabled = true;
+  }
+
+  function showPath(side, lineIndex) {
+    const { doc } = side.view.state;
+    if (!doc.length) return pathNote(side, 'No payload');
+    if (side.mode !== 'json' && side.mode !== 'xml') return pathNote(side, 'Path is for JSON and XML');
+    // On one long line, indentation says nothing about where the caret is.
+    if (doc.lines === 1 && doc.length > 1 && !['layout', 'sorted', 'sorted-arrays', 'layout-no-sort'].includes(side.statusKey)) {
+      return pathNote(side, 'Format this side to see the path');
     }
-    side.caret.textContent = text;
-    side.caret.title = text;
+    const getLine = (index) => doc.line(index + 1).text;
+    const line = Math.min(lineIndex, doc.lines - 1);
+    const segments = side.mode === 'json' ? jsonPathSegments(getLine, line) : xmlPathSegments(getLine, line);
+    if (!segments) return pathNote(side, 'Path not available for this line');
+    side.pathText = pathString(side.mode, segments);
+    const labels = [side.mode === 'xml' ? '/' : '$', ...segments.map((part) => ('index' in part ? `[${part.index}]` : part.tag ?? part.key))];
+    const nodes = [];
+    labels.forEach((label, index) => {
+      if (index) nodes.push(el('span', { class: 'path-sep', 'aria-hidden': 'true', text: '›' }));
+      nodes.push(el('span', { class: index === labels.length - 1 ? 'path-crumb is-current' : 'path-crumb', text: label }));
+    });
+    side.crumbs.replaceChildren(...nodes);
+    side.crumbs.setAttribute('aria-label', `Path ${side.pathText}`);
+    side.copyPathBtn.disabled = false;
+    return undefined;
+  }
+
+  for (const side of sides) {
+    side.copyPathBtn.addEventListener('click', () => copyText(side.pathText, `Copied ${side.pathText}`));
+    pathNote(side, 'No payload');
   }
 
   // --- Line detail: the whole line from both sides, wrapped -----------------------------
@@ -1229,6 +1288,17 @@ export function initCompare({ host, windows, activeWindowId, readWindow, windowH
     const line = side === left ? op.l : op.r;
     repaintLines();
     revealLine(side, line);
+    // Both path bars follow the difference, where the other side has that row.
+    showPath(side, line);
+    const found = opAt(side === left, line);
+    let other = found ? partnerLine(side === left, found, line) : -1;
+    if (other < 0) {
+      // No row of its own: use where this difference starts on the other side.
+      for (let at = first; at <= last && other < 0; at += 1) {
+        if (side === left ? ops[at].rc : ops[at].lc) other = side === left ? ops[at].r : ops[at].l;
+      }
+    }
+    if (other >= 0) showPath(otherSide(side), other);
     detailSide = side;
     detailLine = line;
     updateDetail();
@@ -1306,7 +1376,10 @@ export function initCompare({ host, windows, activeWindowId, readWindow, windowH
 
   function goToTypedLine() {
     const line = Number.parseInt(searchInput.value.slice(1), 10);
-    if (!Number.isInteger(line) || line < 1) return;
+    if (!Number.isInteger(line) || line < 1) {
+      searchCount.textContent = 'Type a line number, such as :120';
+      return;
+    }
     const side = leader;
     const { doc } = side.view.state;
     const target = Math.min(line, doc.lines);
@@ -1374,15 +1447,16 @@ export function initCompare({ host, windows, activeWindowId, readWindow, windowH
     }
   }
 
-  function downloadText(text, name) {
-    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
-    const link = el('a', { href: url, download: name });
-    document.body.append(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setStatus(`Downloaded ${name}.`, 'success');
-  }
+  // Parked for now, along with its menu item above.
+  // function downloadText(text, name) {
+  //   const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+  //   const link = el('a', { href: url, download: name });
+  //   document.body.append(link);
+  //   link.click();
+  //   link.remove();
+  //   setTimeout(() => URL.revokeObjectURL(url), 1000);
+  //   setStatus(`Downloaded ${name}.`, 'success');
+  // }
 
   // --- Choosing what to compare ----------------------------------------------------------
 
@@ -1422,7 +1496,13 @@ export function initCompare({ host, windows, activeWindowId, readWindow, windowH
       return;
     }
     try {
-      replaceRaw(side, await file.text());
+      const text = await file.text();
+      // A control character no text format uses: this is not a text file.
+      if (text.slice(0, 8192).includes('\u0000')) {
+        setStatus(`${file.name} looks like a binary file, so it wasn't opened.`, 'warning');
+        return;
+      }
+      replaceRaw(side, text);
       setStatus(`Opened ${file.name} on ${side.name}. Ctrl/Cmd+Z brings back what was there.`);
     } catch (_) {
       setStatus(`Could not read ${file.name}.`, 'error');
@@ -1494,21 +1574,46 @@ export function initCompare({ host, windows, activeWindowId, readWindow, windowH
     const [leftName, rightName] = [left.name, right.name];
     applyName(left, rightName);
     applyName(right, leftName);
-    saveNames();
     compare({ normalize: true });
   });
 
-  // --- Remembering across a reload -------------------------------------------------------------
+  // --- One comparison per window ----------------------------------------------------------------
+
+  // What it takes to rebuild the panes. A side showing a window or a history
+  // entry keeps only that link, since the text already lives there; pasted or
+  // edited text has nowhere else to live, so it is kept.
+  const captureSide = (side) => ({
+    raw: side.select.value === 'edited' ? side.raw : null,
+    source: side.select.value,
+    name: side.name,
+    edited: side.statusKey === 'edited',
+  });
+  const captureState = () => ({
+    left: captureSide(left),
+    right: captureSide(right),
+    difference: currentDifference,
+    topLine: leader.view.state.doc.lineAt(leader.view.lineBlockAtHeight(leader.view.scrollDOM.scrollTop).from).number,
+    leader: leader.key,
+  });
+
+  const stateKey = (id) => `${storageScope}:window:${id}`;
+  const openKey = `${storageScope}:state`;
 
   function saveNow() {
-    for (const side of sides) {
-      if (side.raw !== side.savedRaw || side.savedSource !== side.select.value) {
-        side.savedRaw = side.raw;
-        side.savedSource = side.select.value;
-        saveSession(side.key, { raw: side.raw, source: side.select.value });
-      }
+    clearTimeout(saveTimer);
+    saveSession(openKey, { open: active, savedAt: Date.now() });
+    if (!panesWindow) return;
+    const state = captureState();
+    const saved = windowStates.get(panesWindow);
+    windowStates.set(panesWindow, state);
+    // Rewriting a large payload is wasted work unless something in it changed.
+    const sameSide = (a, b) => a && a.raw === b.raw && a.source === b.source && a.name === b.name && a.edited === b.edited;
+    if (saved?.written && sameSide(saved.left, state.left) && sameSide(saved.right, state.right)) {
+      state.written = true;
+      return;
     }
-    saveSession('state', { open: active });
+    state.written = true;
+    saveSession(stateKey(panesWindow), { ...state, written: undefined, savedAt: Date.now() });
   }
 
   function scheduleSave() {
@@ -1516,22 +1621,97 @@ export function initCompare({ host, windows, activeWindowId, readWindow, windowH
     saveTimer = setTimeout(saveNow, SAVE_DELAY_MS);
   }
 
-  const restoring = loadSession().then((session) => {
-    if (!session) return false;
-    let restored = false;
+  async function switchTo(id) {
+    const token = ++switchToken;
+    if (panesWindow && panesWindow !== id) saveNow();
+    panesWindow = null;
+    currentWindow = id;
+    // Anything still running describes the window being left.
+    requestId += 1;
     fillSources();
-    for (const side of sides) {
-      const saved = session[side.key];
-      if (saved?.raw && !side.raw) {
-        side.raw = saved.raw;
-        side.savedRaw = saved.raw;
-        side.savedSource = saved.source;
-        side.select.value = saved.source || 'edited';
-        if (side.select.selectedIndex < 0) side.select.value = 'edited';
-        restored = true;
+    const state = windowStates.get(id);
+    const loaded = [];
+    const lost = [];
+    if (state) {
+      for (const side of sides) {
+        const saved = state[side.key];
+        let { raw, source } = saved;
+        if (raw === null || raw === undefined) {
+          side.select.value = source;
+          // The window it pointed at may have been closed since.
+          const stillThere = side.select.selectedIndex >= 0;
+          // eslint-disable-next-line no-await-in-loop
+          raw = stillThere ? await readSource(source) : '';
+          if (!stillThere) {
+            source = 'edited';
+            lost.push(saved.name);
+          }
+        }
+        loaded.push({ side, raw, source, name: saved.name, edited: !!saved.edited });
+      }
+    } else {
+      // A window starts with its own payload on the left and the right open.
+      const own = await readWindow(id);
+      loaded.push({ side: left, raw: own, source: id, name: DEFAULT_NAMES.left, edited: false });
+      loaded.push({ side: right, raw: '', source: 'edited', name: DEFAULT_NAMES.right, edited: false });
+    }
+    if (token !== switchToken) return;
+    panesWindow = id;
+    const edited = {};
+    for (const { side, raw, source, name, edited: wasEdited } of loaded) {
+      side.raw = raw;
+      side.select.value = source;
+      if (side.select.selectedIndex < 0) side.select.value = 'edited';
+      side.previous = null;
+      applyName(side, name);
+      edited[side.key] = wasEdited;
+    }
+    pendingRestore = {
+      edited,
+      difference: state?.difference ?? -1,
+      topLine: state?.topLine ?? 1,
+      leader: state?.leader ?? 'left',
+    };
+    compare({ normalize: true });
+    if (lost.length) setStatus(`The ${lost.join(' and ')} side is empty because the window it showed was closed.`, 'warning');
+    scheduleSave();
+  }
+
+  function windowChanged(id) {
+    if (active && id !== currentWindow) switchTo(id);
+  }
+
+  function windowClosed(id) {
+    windowStates.delete(id);
+    deleteSession(stateKey(id));
+    if (currentWindow === id) currentWindow = null;
+    if (panesWindow === id) panesWindow = null;
+    // A pane showing that window keeps its text, now as its own.
+    fillSources();
+  }
+
+  const restoring = loadSession().then((session) => {
+    const now = Date.now();
+    const prefix = `${storageScope}:window:`;
+    const legacy = session.left || session.right;
+    for (const [key, value] of Object.entries(session)) {
+      if (key.startsWith(prefix)) {
+        windowStates.set(key.slice(prefix.length), { ...value, written: true });
+      } else if (key !== openKey && (key === 'left' || key === 'right' || key === 'state' || now - (value?.savedAt ?? 0) > STALE_SESSION_MS)) {
+        deleteSession(key);
       }
     }
-    return restored && !!session.state?.open;
+    // Saved before comparisons were per window: it belongs to the current one.
+    if (legacy && !windowStates.size) {
+      const side = (key) => ({
+        raw: session[key]?.raw ?? '',
+        source: session[key]?.source === 'edited' ? 'edited' : (session[key]?.source ?? 'edited'),
+        name: options[`${key}Name`] || DEFAULT_NAMES[key],
+        edited: false,
+      });
+      windowStates.set(activeWindowId(), { left: side('left'), right: side('right'), difference: -1, topLine: 1, leader: 'left' });
+    }
+    return !!(session[openKey]?.open ?? session.state?.open);
   });
 
   // --- Entering and leaving ------------------------------------------------------------------
@@ -1553,24 +1733,9 @@ export function initCompare({ host, windows, activeWindowId, readWindow, windowH
     await restoring;
     if (!active) return;
     fillSources();
-    if (!left.raw && !right.raw) {
-      // Start from the current window against the next one with something in it.
-      const list = windows();
-      const current = activeWindowId();
-      left.select.value = current;
-      left.raw = await readWindow(current);
-      left.select.value = current;
-      const others = list.filter((win) => win.id !== current);
-      for (const win of others) {
-        // eslint-disable-next-line no-await-in-loop
-        const text = await readWindow(win.id);
-        if (text) {
-          right.raw = text;
-          right.select.value = win.id;
-          break;
-        }
-      }
-      compare({ normalize: true });
+    const current = activeWindowId();
+    if (current !== currentWindow) {
+      await switchTo(current);
     } else {
       // A side showing a window follows what that window holds now.
       let changed = !result;
@@ -1609,9 +1774,7 @@ export function initCompare({ host, windows, activeWindowId, readWindow, windowH
     const button = event.target.closest('button');
     if (button && button !== toggleBtn) close();
   });
-  // Going to a window means looking at it, which Compare would otherwise hide.
   document.addEventListener('click', (event) => {
-    if (active && event.target.closest?.('.window-tab-select, #newWindowBtn')) close();
     for (const menu of menus) if (menu.open && !menu.contains(event.target)) menu.open = false;
   }, true);
   const windowTabs = document.querySelector('#windowTabs');
@@ -1676,6 +1839,9 @@ export function initCompare({ host, windows, activeWindowId, readWindow, windowH
     compare,
     step,
     restorePrevious,
+    windowChanged,
+    windowClosed,
+    currentWindow: () => currentWindow,
     openSearch,
     stepSearch,
     search,

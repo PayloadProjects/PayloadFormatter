@@ -37,6 +37,14 @@ export function createWindowManager() {
     };
   }
 
+  // The lowest number not in use. Ids keep counting up so they stay unique, but
+  // the name someone reads shouldn't say "Window 21" when only one is open.
+  function nextDefaultName() {
+    let number = 1;
+    while (windows.some((win) => win.name === `Window ${number}`)) number += 1;
+    return `Window ${number}`;
+  }
+
   // Creates a window (does not activate it); returns null at the cap.
   // The history starts seeded with the initial payload when there is one.
   function newWindow(name, payload = '') {
@@ -45,7 +53,7 @@ export function createWindowManager() {
     const text = String(payload ?? '');
     const win = {
       id: `window-${counter}`,
-      name: cleanName(name) || `Window ${counter}`,
+      name: cleanName(name) || nextDefaultName(),
       payload: text,
       history: createPayloadHistory(),
       ui: freshUiState(),

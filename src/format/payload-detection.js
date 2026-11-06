@@ -49,6 +49,11 @@ function detectContent(text) {
     return { mode: 'xml', confidence: 0.98, reason: 'content starts with XML markup' };
   }
 
+  // XML pasted from a log or web page, with its markup entity-encoded.
+  if (/^&lt;[A-Za-z_?!]/.test(text) && /&gt;/.test(text)) {
+    return { mode: 'xml', confidence: 0.86, reason: 'content is entity-encoded XML markup' };
+  }
+
   const strictJson = tryJson(text);
   if (strictJson.ok) {
     if (strictJson.value && typeof strictJson.value === 'object') {

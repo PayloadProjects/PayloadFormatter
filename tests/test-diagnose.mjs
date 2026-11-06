@@ -43,9 +43,13 @@ check('json', '{"tags": ["a", "b",]}',
 check('json', '{"a": 1, "b": 2,}',
   { message: 'Extra comma before }', line: 1, col: 16, marked: ',', fix: 'Remove the comma' });
 check('json', "{'name': 'Mira'}",
-  { message: 'JSON text needs double quotes', line: 1, col: 2, marked: "'name'", fix: 'Use double quotes', fixedValid: false });
+  { message: 'JSON text needs double quotes', line: 1, col: 2, marked: "'name'", fix: 'Use double quotes' });
 check('json', "{\"say\": 'it\\'s \"ok\"'}",
   { message: 'JSON text needs double quotes', line: 1, col: 9, fix: 'Use double quotes' });
+// One click fixes every instance of the mistake, not just the first.
+check('json', "{'a': 1, 'b': 'x', 'c': ['y', \"it's\"]}", { message: 'JSON text needs double quotes', line: 1, col: 2, fix: 'Use double quotes' });
+check('json', '{a: 1, b: {c: 2, "d": "e: f, g: h"}, i: [{j: 3}]}', { message: 'Property names need double quotes', line: 1, col: 2, fix: 'Add the quotes' });
+check('json', '{1: "x", 2.5: "y"}', { message: 'Property names need double quotes', line: 1, col: 2, fix: 'Add the quotes' });
 check('json', '{name: "Mira"}',
   { message: 'Property names need double quotes', line: 1, col: 2, marked: 'name', fix: 'Add the quotes' });
 check('json', '{"a": 1, "b": 2',
@@ -186,14 +190,15 @@ assert.deepEqual(lineColumn('a\nbc\nd', 4), { line: 2, col: 3 });
   assert.equal(q('#issueBar').hidden, true, 'bar hides once the payload is valid');
   assert.equal(fixed, 1, 'a successful fix hands over to formatting');
 
-  text = "{'a': 'b'}";
+  text = "{'a': 'b',}";
   issues.check();
   q('#issueFixBtn').click();
+  assert.equal(text, '{"a": "b",}', 'every instance of the mistake is fixed at once');
   assert.equal(q('#issueBar').hidden, false, 'the next problem shows straight away');
-  assert.equal(q('#issueWhere').textContent, 'Line 1, column 7');
-  assert.deepEqual(calls.at(-1), ['reveal', 6], 'and the editor moves to it');
+  assert.equal(q('#issueWhere').textContent, 'Line 1, column 10');
+  assert.deepEqual(calls.at(-1), ['reveal', 9], 'and the editor moves to it');
   assert.equal(fixed, 1, 'no formatting while problems remain');
-  assert.equal(nextShown?.message, 'JSON text needs double quotes', 'the app is told about the next problem');
+  assert.equal(nextShown?.message, 'Extra comma before }', 'the app is told about the next problem');
 
   text = '{"a": 1, "b": }';
   issues.check();

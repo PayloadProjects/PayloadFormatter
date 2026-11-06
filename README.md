@@ -42,11 +42,12 @@ A fast JSON and XML formatter that runs entirely in your browser. Paste a payloa
 - Ignore menu: spaces, case, blank lines, the same value spelled differently (`1.0` and `1`, `\u00e9` and `é`), array order, and fields you name, such as timestamps and trace IDs. Ignored lines stay on screen marked `≈`, and the summary counts them
 - Show menu: only the differences (click a hidden section to open it), a line detail panel showing long lines in full, and which kinds of change to highlight and step through
 - Find across both sides, and `:120` to go to a line
-- The caret's line, column and JSON or XML path under each pane
-- Copy a side exactly as pasted, copy the differences, or download them as a `.diff`
+- A path bar on each side showing where the cursor or current difference sits, with Copy path, plus the line and column under each pane
+- Copy a side exactly as pasted, or copy the differences as a unified diff
 - Paste, open a file, or drop one on a side, or pick any window or one of its earlier payloads. Pasting over a payload replaces it, and `Ctrl/Cmd + Z` brings it back
 - Click `⇄` to jump to the other end of a moved block
-- Both sides and the options are still there after a reload, kept only in your browser
+- Each window has its own comparison, side names and position. A new window starts with its own payload on the left, and a side showing a window always shows that window's current text
+- Comparisons and options are still there after a reload, kept only in your browser
 - An overview map of every difference, and next/previous difference
 - Compare any two windows, or paste or type into either side; both panes are editable and never change your windows
 - Click a side's name to rename it, such as Production and UAT; names are remembered and move with their payload on swap

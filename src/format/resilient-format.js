@@ -281,8 +281,14 @@ function duplicateKeyWarning({ count, first }) {
 
 export function formatXmlBestEffort(input, options = {}) {
   const started = now();
-  const original = trimOuterXmlWhitespace(String(input ?? ''));
-  if (!original) throw new Error('Nothing to format. Paste or upload a payload first.');
+  const pasted = trimOuterXmlWhitespace(String(input ?? ''));
+  if (!pasted) throw new Error('Nothing to format. Paste or upload a payload first.');
+
+  // XML copied from a log or web page, with all of its markup entity-encoded.
+  const entityEncoded = /^&lt;[A-Za-z_?!]/.test(pasted);
+  const original = entityEncoded
+    ? pasted.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&')
+    : pasted;
 
   const rawXml = startsLikeXmlDocument(original);
   const wrappedEncoding = !rawXml && looksLikeQuotedXmlEncoding(original);
@@ -317,7 +323,7 @@ export function formatXmlBestEffort(input, options = {}) {
     formatted = prettyXml(cleaned, options);
   }
 
-  const normalizedEncoding = xmlEncodingChanged || repairedInnerEncoding || cleaned !== original;
+  const normalizedEncoding = entityEncoded || xmlEncodingChanged || repairedInnerEncoding || cleaned !== original;
   return {
     mode: 'xml',
     formatted,
