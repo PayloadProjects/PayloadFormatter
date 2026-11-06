@@ -17,21 +17,34 @@
   --compare-ignored-bg: #1b2030;
   --compare-match-bg: #ffd166;
   --compare-match-text: #1a1f2b;
+  --compare-added-map: var(--compare-added-mark);
+  --compare-removed-map: var(--compare-removed-mark);
+  --compare-changed-map: var(--compare-changed-mark);
+  --compare-moved-map: var(--compare-moved-mark);
+  --compare-edge: 0px;
+  --compare-stripe: 6px;
 }
 :root[data-theme="light"] {
-  --compare-added-bg: #dcf5e6;
-  --compare-added-mark: #16855c;
-  --compare-removed-bg: #fbe0e2;
-  --compare-removed-mark: #c0392b;
-  --compare-changed-bg: #fbeed0;
-  --compare-changed-mark: #b7791f;
-  --compare-moved-bg: #e1e7fd;
-  --compare-moved-mark: #4f6bed;
-  --compare-inline-bg: #f5b83d;
-  --compare-spacer-a: #ffffff;
-  --compare-spacer-b: #e9ecf2;
-  --compare-ignored-bg: #eef0f5;
-  --compare-match-bg: #ffd166;
+  --compare-added-map: #249a70;
+  --compare-removed-map: #d8476a;
+  --compare-changed-map: #d9a520;
+  --compare-moved-map: #6f68e0;
+  --compare-edge: 2px;
+  --compare-stripe: 4px;
+  --compare-added-bg: #cdeedb;
+  --compare-added-mark: #0b5f47;
+  --compare-removed-bg: #f8d5dc;
+  --compare-removed-mark: #a3163a;
+  --compare-changed-bg: #fbeec4;
+  --compare-changed-mark: #7f4d05;
+  --compare-moved-bg: #d9d8fb;
+  --compare-moved-mark: #3730a3;
+  --compare-inline-bg: #f8d873;
+  --compare-inline-edge: inset 0 -2px 0 #b8860b;
+  --compare-spacer-a: #eceefb;
+  --compare-spacer-b: #d9dcf4;
+  --compare-ignored-bg: #e2e5f8;
+  --compare-match-bg: #c7b8ff;
   --compare-match-text: #1a1f2b;
 }
 
@@ -95,15 +108,15 @@ html[data-compare="on"] .status-meta { display: none; }
 .compare-detail-name { flex: 0 0 auto; max-width: 110px; overflow: hidden; color: var(--muted); font-family: var(--font-ui); font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .compare-detail-text { flex: 1; min-width: 0; color: var(--editor-text); white-space: pre-wrap; overflow-wrap: anywhere; }
 .compare-detail-text em { color: var(--muted); font-family: var(--font-ui); font-style: normal; font-size: 12px; }
-.compare-detail-text .compare-inline { background: var(--compare-inline-bg); border-radius: 2px; color: inherit; }
+.compare-detail-text .compare-inline { background: var(--compare-inline-bg); border-radius: 2px; box-shadow: var(--compare-inline-edge, none); color: inherit; }
 
 .compare-pane { flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .compare-pane.is-dropping { outline: 2px dashed var(--accent); outline-offset: -3px; }
 .compare-file { display: none; }
-.compare-foot { flex: none; min-height: 26px; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 2px 10px; border-top: 1px solid var(--divider); font-size: 12px; }
+.compare-foot { flex: none; min-height: 26px; min-width: 0; background: var(--strip-bg); display: flex; align-items: center; gap: 10px; padding: 2px 10px; border-top: 1px solid var(--divider); font-size: 12px; }
 .compare-caret { flex: 0 1 auto; min-width: 0; overflow: hidden; color: var(--soft); text-overflow: ellipsis; white-space: nowrap; }
 .compare-pane + .compare-pane { border-left: 1px solid var(--divider); }
-.compare-head { min-height: 36px; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-bottom: 1px solid var(--divider); }
+.compare-head { min-height: 36px; min-width: 0; background: var(--strip-bg); display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-bottom: 1px solid var(--divider); }
 .compare-side { flex: 0 1 auto; min-width: 44px; max-width: 150px; height: 26px; min-height: 26px; display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; margin-left: -6px; border: 1px solid transparent; border-radius: 7px; background: transparent; box-shadow: none; color: var(--soft); font: inherit; font-size: 12.5px; font-weight: 600; cursor: text; }
 .compare-side::after { content: "✎"; flex: none; font-size: 11px; font-weight: 400; opacity: 0; }
 .compare-side:hover, .compare-side:focus-visible { border-color: var(--button-border); background: var(--inset); color: var(--editor-text); }
@@ -125,14 +138,14 @@ html[data-compare="on"] .status-meta { display: none; }
 .compare-empty[hidden] { display: none; }
 
 /* Rows */
-.compare-editor .compare-line-added { background: var(--compare-added-bg); }
-.compare-editor .compare-line-removed { background: var(--compare-removed-bg); }
-.compare-editor .compare-line-changed { background: var(--compare-changed-bg); }
-.compare-editor .compare-line-moved { background: var(--compare-moved-bg); }
+.compare-editor .compare-line-added { background: var(--compare-added-bg); box-shadow: inset var(--compare-edge) 0 0 var(--compare-added-mark); }
+.compare-editor .compare-line-removed { background: var(--compare-removed-bg); box-shadow: inset var(--compare-edge) 0 0 var(--compare-removed-mark); }
+.compare-editor .compare-line-changed { background: var(--compare-changed-bg); box-shadow: inset var(--compare-edge) 0 0 var(--compare-changed-mark); }
+.compare-editor .compare-line-moved { background: var(--compare-moved-bg); box-shadow: inset var(--compare-edge) 0 0 var(--compare-moved-mark); }
 .compare-editor .compare-line-ignored-row { background: var(--compare-ignored-bg); }
 .compare-editor .compare-line.is-current { box-shadow: inset 3px 0 0 var(--accent); }
-.compare-editor .compare-inline { background: var(--compare-inline-bg); border-radius: 2px; }
-.compare-spacer { box-sizing: border-box; background: repeating-linear-gradient(135deg, var(--compare-spacer-a) 0 6px, var(--compare-spacer-b) 6px 12px); }
+.compare-editor .compare-inline { background: var(--compare-inline-bg); border-radius: 2px; box-shadow: var(--compare-inline-edge, none); }
+.compare-spacer { box-sizing: border-box; background: repeating-linear-gradient(135deg, var(--compare-spacer-a) 0 var(--compare-stripe), var(--compare-spacer-b) var(--compare-stripe) calc(var(--compare-stripe) * 2)); }
 .compare-fold { display: flex; width: 100%; min-height: 0; align-items: center; justify-content: center; box-sizing: border-box; padding: 0; border: 0; border-block: 1px solid var(--divider); border-radius: 0; background: var(--inset); box-shadow: none; color: var(--soft); font-family: var(--font-ui); font-size: 12px; cursor: pointer; }
 .compare-fold:hover { color: var(--editor-text); }
 

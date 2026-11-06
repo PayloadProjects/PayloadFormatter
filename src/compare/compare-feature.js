@@ -754,10 +754,10 @@ export function initCompare({ host, windows, activeWindowId, readWindow, windowH
     const total = rowStarts[result.ops.length] || 1;
     const styles = getComputedStyle(root);
     const colors = {
-      [KIND.ADDED]: styles.getPropertyValue('--compare-added-mark'),
-      [KIND.REMOVED]: styles.getPropertyValue('--compare-removed-mark'),
-      [KIND.CHANGED]: styles.getPropertyValue('--compare-changed-mark'),
-      [KIND.MOVED]: styles.getPropertyValue('--compare-moved-mark'),
+      [KIND.ADDED]: styles.getPropertyValue('--compare-added-map'),
+      [KIND.REMOVED]: styles.getPropertyValue('--compare-removed-map'),
+      [KIND.CHANGED]: styles.getPropertyValue('--compare-changed-map'),
+      [KIND.MOVED]: styles.getPropertyValue('--compare-moved-map'),
     };
     result.ops.forEach((op, index) => {
       if (!colors[op.kind] || !kindShown(op.kind)) return;
@@ -1548,6 +1548,8 @@ export function initCompare({ host, windows, activeWindowId, readWindow, windowH
     previousView = otherViewButtons().find((button) => button.getAttribute('aria-pressed') === 'true') || null;
     previousView?.setAttribute('aria-pressed', 'false');
     toggleBtn.setAttribute('aria-pressed', 'true');
+    // A message about the view being left doesn't apply here.
+    setStatus('');
     await restoring;
     if (!active) return;
     fillSources();
