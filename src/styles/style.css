@@ -113,101 +113,101 @@
 :root[data-theme="light"] {
   color-scheme: only light;
 
-  --page-bg: #e4e8ef;
-  --text: #111827;
-  --heading: #111827;
-  --soft: #344055;
-  --muted: #556074;
-  --faint: #667085;
-  --sep: #aab2c0;
+  --page-bg: #d9dcf3;
+  --text: #1c1f45;
+  --heading: #1c1f45;
+  --soft: #373b68;
+  --muted: #4c5080;
+  --faint: #565a85;
+  --sep: #a4a9d6;
 
-  --panel-bg: #ffffff;
-  --panel-border: #cdd3dd;
-  --inset: #f1f3f7;
-  --divider: #d3d9e2;
-  --strip-bg: #f7f8fb;
-  --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 6px 16px rgba(16, 24, 40, .06);
+  --panel-bg: #eceefb;
+  --panel-border: #b6bbe4;
+  --inset: #e2e5f8;
+  --divider: #c6cbeb;
+  --strip-bg: #e2e5f8;
+  --shadow: 0 1px 2px rgba(49, 46, 129, .10), 0 8px 20px rgba(49, 46, 129, .10);
 
-  --button-bg: #f1f3f7;
-  --button-border: #cdd3dd;
-  --button-hover-bg: #e8ebf1;
-  --button-hover-border: #aab2c0;
-  --pressed-bg: #eef2ff;
-  --accent: #4f6bed;
-  --accent-text: #3a55d6;
+  --button-bg: #f3f4fd;
+  --button-border: #b6bbe4;
+  --button-hover-bg: #e6e8fa;
+  --button-hover-border: #8f95d6;
+  --pressed-bg: #d9d8fb;
+  --accent: #4338ca;
+  --accent-text: #3730a3;
   --on-accent: #ffffff;
-  --primary-bg: #4f6bed;
-  --primary-hover-bg: #3f5bdd;
-  --seg-active-bg: #4f6bed;
+  --primary-bg: #4338ca;
+  --primary-hover-bg: #3730a3;
+  --seg-active-bg: #4338ca;
   --seg-active-fg: #ffffff;
 
-  --danger-text: #b42318;
-  --danger-border: #f2c4bf;
-  --danger-hover-bg: #fef1f0;
+  --danger-text: #a3163a;
+  --danger-border: #e6b3c1;
+  --danger-hover-bg: #f7dfe6;
 
-  --error: #b42318;
-  --success: #16855c;
-  --warning: #9a5b0c;
+  --error: #a3163a;
+  --success: #0d6650;
+  --warning: #7f4d05;
 
-  --editor-bg: #ffffff;
-  --editor-text: #111827;
-  --editor-placeholder: #667085;
-  --editor-focus: #4f6bed;
-  --editor-caret: #111827;
-  --active-line: rgba(79, 107, 237, .07);
+  --editor-bg: #eceefb;
+  --editor-text: #1c1f45;
+  --editor-placeholder: #565a85;
+  --editor-focus: #4338ca;
+  --editor-caret: #1c1f45;
+  --active-line: rgba(67, 56, 202, .07);
 
   /* Light mode uses darker inks, not the dark palette on a white surface. */
-  --syntax-key: #1e5aae;
-  --syntax-string: #9a4f0c;
-  --syntax-number: #7238be;
-  --syntax-boolean: #0b6b4c;
-  --syntax-null: #a93226;
-  --syntax-attribute: #8a3fa8;
-  --syntax-muted: #556074;
-  --tree-hover-bg: #f3f5fa;
-  --tree-focus-bg: #eef2ff;
-  --tree-match-bg: #e9edfb;
-  --tree-hit-bg: #d6dfff;
-  --tree-hit-border: #4f6bed;
-  --code-selection-bg: #d9e1ff;
+  --syntax-key: #322c9c;
+  --syntax-string: #94164a;
+  --syntax-number: #0c5f4d;
+  --syntax-boolean: #6d21b5;
+  --syntax-null: #6d21b5;
+  --syntax-attribute: #8f3210;
+  --syntax-muted: #4c5080;
+  --tree-hover-bg: #e2e5f8;
+  --tree-focus-bg: #dcdff6;
+  --tree-match-bg: #d3d7f2;
+  --tree-hit-bg: #c9cef2;
+  --tree-hit-border: #4338ca;
+  --code-selection-bg: #cdd1f3;
 
-  --brand-mark-bg: #ffffff;
-  --brand-mark-border: #cdd3dd;
-  --brand-mark-text: #4f6bed;
+  --brand-mark-bg: #f3f4fd;
+  --brand-mark-border: #b6bbe4;
+  --brand-mark-text: #4338ca;
 
-  --badge-bg: #f1f3f7;
-  --badge-border: #f1f3f7;
-  --badge-text: #344055;
-  --json-bg: #e8f0fd;
-  --json-border: #e8f0fd;
-  --json-text: #1f4fa8;
-  --json-dot: #2f6fde;
-  --xml-bg: #fff3dd;
-  --xml-border: #fff3dd;
-  --xml-text: #8a5a0c;
-  --xml-dot: #c27a12;
+  --badge-bg: #dcdff6;
+  --badge-border: #dcdff6;
+  --badge-text: #373b68;
+  --json-bg: #d9dbf8;
+  --json-border: #d9dbf8;
+  --json-text: #2f2a9a;
+  --json-dot: #4338ca;
+  --xml-bg: #f7e8c3;
+  --xml-border: #f7e8c3;
+  --xml-text: #6f4406;
+  --xml-dot: #a96a0c;
 
-  --local-dot: #16855c;
-  --guide: #dce1e9;
-  --crumb-on: #e6ebff;
+  --local-dot: #0d6650;
+  --guide: #cfd3f0;
+  --crumb-on: #d3d7f2;
 
-  --notice-bg: #fff6e6;
-  --notice-border: #eed3a0;
-  --notice-icon: #b7791f;
+  --notice-bg: #f8edcf;
+  --notice-border: #e4cd92;
+  --notice-icon: #96600f;
 
-  --issue-bg: rgba(180, 35, 24, .10);
-  --issue-bar-bg: #fef1f0;
-  --issue-bar-border: #f2c4bf;
+  --issue-bg: rgba(163, 22, 58, .10);
+  --issue-bar-bg: #f7dfe6;
+  --issue-bar-border: #e6b3c1;
 
-  --mini-key: #c3cdee;
-  --mini-str: #e6cfb4;
-  --mini-num: #bfdfd0;
-  --mini-view: rgba(79, 107, 237, .08);
-  --mini-view-edge: rgba(79, 107, 237, .35);
+  --mini-key: #aeb4e6;
+  --mini-str: #dfbccb;
+  --mini-num: #a9d6c8;
+  --mini-view: rgba(67, 56, 202, .10);
+  --mini-view-edge: rgba(67, 56, 202, .40);
 
-  --scroll-track: #ffffff;
-  --scroll-thumb: #cdd3dd;
-  --scroll-thumb-hover: #aab2c0;
+  --scroll-track: #e2e5f8;
+  --scroll-thumb: #b6bbe4;
+  --scroll-thumb-hover: #8f95d6;
 }
 
 * { box-sizing: border-box; }

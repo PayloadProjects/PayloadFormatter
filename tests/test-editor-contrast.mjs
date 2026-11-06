@@ -32,10 +32,12 @@ assert.ok(luminance(resolve(dark,'--editor-bg'))<.01,'dark reading surface stays
 // so the card edge reads clearly; the toolbar band is lifted again.
 assert.ok(luminance(resolve(dark,'--page-bg'))<luminance(resolve(dark,'--editor-bg')),'dark panel is lifted off the page');
 assert.ok(luminance(resolve(dark,'--editor-bg'))<luminance(resolve(dark,'--strip-bg')),'dark toolbar band is lifted off the panel');
-assert.ok(luminance(resolve(light,'--page-bg'))<luminance(resolve(light,'--panel-bg')),'light page sits below the white panel');
+assert.ok(luminance(resolve(light,'--page-bg'))<luminance(resolve(light,'--panel-bg')),'light page sits below the panel');
 assert.ok(contrast(resolve(dark,'--divider'),resolve(dark,'--panel-bg'))>=1.6,'dark dividers are clearly visible');
 assert.ok(contrast(resolve(light,'--divider'),resolve(light,'--panel-bg'))>=1.3,'light dividers are clearly visible');
-assert.ok(luminance(resolve(light,'--editor-bg'))>.9,'light mode remains light');
+// Lavender dusk: the reading surface is tinted on purpose, not white.
+assert.ok(luminance(resolve(light,'--editor-bg'))>.8,'light mode remains light');
+assert.notEqual(resolve(light,'--editor-bg').toLowerCase(),'#ffffff','light mode has a tinted reading surface');
 const readingTokens=['--editor-text','--syntax-key','--syntax-string','--syntax-number','--syntax-boolean','--syntax-null','--syntax-attribute','--syntax-muted'];
 for(const [theme,tokens] of [['dark',dark],['light',light]]) {
   for(const token of readingTokens) {
