@@ -1,0 +1,883 @@
+import {
+  normalizeJsonEncodedInput,
+  decodeOneEscapeLayer,
+  extractJsonValueWithWrapperTail,
+} from './input-normalization.js';
+import { normalizeEscapedXml, prettyXml, validateXmlLight, formatAndValidateXml } from './xml-format.js';
+
+const LARGE_RESULT_METRICS_CHARS = 2 * 1024 * 1024;
+
+// Cap for the loose pretty-printer's indent depth: mirrors the XML
+// formatter's 255 cap so pathological nesting cannot turn indentation into
+// quadratic output.
+const PRETTY_LOOSE_MAX_DEPTH = 4000;
+const PRETTY_LOOSE_INDENT_CAP = 255;
+// Valid JSON nested deeper than this is refused: its indentation alone would
+// produce a pathological amount of output.
+const MAX_FORMAT_DEPTH = 4000;
+
+// V8's JSON.stringify recurses, so valid JSON nested ~10k+ deep throws a
+// RangeError even though the payload is fine. That is not a syntax problem:
+// it must never fall through to the recovery gauntlet (whose loose path is
+// quadratic on deep input and would turn 60KB into ~200MB of garbage).
+export function tooDeepJsonError() {
+  const error = new Error(
+    'This JSON is valid, but it is nested too deeply to format in this browser.'
+  );
+  error.code = 'JSON_TOO_DEEP';
+  return error;
+}
+
+export function isTooDeepError(error) {
+  return !!error && (error.code === 'JSON_TOO_DEEP' || error instanceof RangeError);
+}
+
+export function formatJsonBestEffort(input) {
+  const started = now();
+  const original = String(input ?? '').trim();
+  if (!original) throw new Error('Nothing to format. Paste or upload a payload first.');
+
+  // Hot path for the overwhelmingly common case: already-valid JSON object or
+  // array. One native parse + one stringify, with no recovery scans.
+  const first = original[0];
+  if (first === '{' || first === '[') {
+    try {
+      const parsed = JSON.parse(original);
+      if (parsed && typeof parsed === 'object') {
+        return buildJsonSuccess({
+          parsed,
+          source: original,
+          original,
+          attemptText: original,
+          notes: [],
+          started,
+          decodedLayers: 0,
+          repairedNested: false,
+        });
+      }
+    } catch (error) {
+      // A RangeError here means the payload parsed but the engine cannot
+      // stringify it (too deeply nested): not a syntax problem, so it must
+      // not fall through to the recovery gauntlet.
+      if (isTooDeepError(error)) throw error;
+      // Fall through to encoding/malformed recovery.
+    }
+  }
+
+  const recovered = recoverJsonForFormatting(original);
+  let lastError = null;
+
+  // Try the recovered candidate before doing any additional full-string repair
+  // passes. This avoids scanning a huge payload for invalid escapes/trailing
+  // commas when recovery already produced valid JSON.
+  try {
+    const decoded = parseJsonDocument(recovered.text);
+    return buildJsonSuccess({
+      parsed: decoded.value,
+      source: decoded.source,
+      original,
+      attemptText: recovered.text,
+      notes: recovered.notes,
+      started,
+      decodedLayers: decoded.layers,
+      repairedNested: decoded.repairedNested,
+    });
+  } catch (error) {
+    lastError = error;
+  }
+
+  const invalidEscapes = repairKnownInvalidJsonEscapes(recovered.text);
+  if (invalidEscapes.changed) {
+    try {
+      const decoded = parseJsonDocument(invalidEscapes.text);
+      return buildJsonSuccess({
+        parsed: decoded.value,
+        source: decoded.source,
+        original,
+        attemptText: invalidEscapes.text,
+        notes: [...recovered.notes, 'removed non-JSON escape markers inside strings'],
+        started,
+        decodedLayers: decoded.layers,
+        repairedNested: decoded.repairedNested,
+      });
+    } catch (error) {
+      if (isTooDeepError(error)) throw error;
+      lastError = error;
+    }
+  }
+
+  const trailingCommas = removeTrailingJsonCommas(invalidEscapes.text);
+  if (trailingCommas.changed) {
+    try {
+      const decoded = parseJsonDocument(trailingCommas.text);
+      return buildJsonSuccess({
+        parsed: decoded.value,
+        source: decoded.source,
+        original,
+        attemptText: trailingCommas.text,
+        notes: [
+          ...recovered.notes,
+          ...(invalidEscapes.changed ? ['removed non-JSON escape markers inside strings'] : []),
+          'removed trailing commas',
+        ],
+        started,
+        decodedLayers: decoded.layers,
+        repairedNested: decoded.repairedNested,
+      });
+    } catch (error) {
+      if (isTooDeepError(error)) throw error;
+      lastError = error;
+    }
+  }
+
+  const displayText = trailingCommas.text || invalidEscapes.text || recovered.text || original;
+  const formatted = prettyJsonLoose(unwrapJsonTextForLooseFormatting(displayText));
+  const issue = lastError?.message || 'JSON syntax could not be validated.';
+
+  return {
+    mode: 'json',
+    formatted,
+    parsed: null,
+    valid: false,
+    bestEffort: true,
+    repaired: formatted !== original || recovered.repaired,
+    repairNote: `Best-effort formatted JSON. The payload still has a syntax issue: ${issue}`,
+    warning: issue,
+    ...resultMetrics(formatted),
+    elapsedMs: Math.round(now() - started),
+  };
+}
+
+function buildJsonSuccess({
+  parsed,
+  source,
+  original,
+  attemptText,
+  notes,
+  started,
+  decodedLayers,
+  repairedNested,
+}) {
+  const { text: formatted, duplicates } = formatValidJson(source);
+  const allNotes = [
+    ...notes,
+    ...(decodedLayers
+      ? [`unwrapped ${decodedLayers} JSON-string escape layer${decodedLayers === 1 ? '' : 's'}`]
+      : []),
+    ...(repairedNested ? ['repaired invalid escapes inside decoded JSON encoding string'] : []),
+  ];
+
+  return {
+    mode: 'json',
+    formatted,
+    parsed,
+    valid: true,
+    bestEffort: false,
+    repaired: attemptText !== original || decodedLayers > 0 || repairedNested,
+    repairNote: allNotes.length
+      ? `Normalized pasted JSON: ${unique(allNotes).join('; ')}.`
+      : '',
+    warning: duplicateKeyWarning(duplicates),
+    ...resultMetrics(formatted),
+    elapsedMs: Math.round(now() - started),
+  };
+}
+
+// Pretty-prints JSON already proven valid by working on its text, not on the
+// parsed values: JSON.parse + stringify would silently round big integers
+// (12345678901234567890), respell numbers (1.50, 1e3) and drop duplicate keys.
+// Output layout matches JSON.stringify(value, null, 2). Duplicate keys are kept
+// and reported. Deep nesting is refused because indentation grows with depth.
+export function formatValidJson(text) {
+  const out = [];
+  const indents = [''];
+  const indentAt = (depth) => (indents[depth] ??= '  '.repeat(depth));
+  // One entry per open bracket: the keys seen in an object, null for an array.
+  const open = [];
+  const seenDuplicates = { count: 0, first: null };
+  const length = text.length;
+  let expectKey = false;
+  let index = 0;
+
+  while (index < length) {
+    const code = text.charCodeAt(index);
+    if (code === 0x20 || code === 0x0A || code === 0x0D || code === 0x09 || code === 0xFEFF) {
+      index += 1;
+    } else if (code === 0x7B || code === 0x5B) { // { [
+      const isObject = code === 0x7B;
+      let next = index + 1;
+      while (isJsonSpace(text.charCodeAt(next))) next += 1;
+      if (text.charCodeAt(next) === (isObject ? 0x7D : 0x5D)) {
+        out.push(isObject ? '{}' : '[]');
+        index = next + 1;
+        continue;
+      }
+      if (open.length >= MAX_FORMAT_DEPTH) throw tooDeepJsonError();
+      open.push(isObject ? new Set() : null);
+      out.push(isObject ? '{\n' : '[\n', indentAt(open.length));
+      expectKey = isObject;
+      index += 1;
+    } else if (code === 0x7D || code === 0x5D) { // } ]
+      open.pop();
+      out.push('\n', indentAt(open.length), text[index]);
+      index += 1;
+    } else if (code === 0x2C) { // ,
+      out.push(',\n', indentAt(open.length));
+      expectKey = open[open.length - 1] !== null;
+      index += 1;
+    } else if (code === 0x3A) { // :
+      out.push(': ');
+      index += 1;
+    } else if (code === 0x22) { // string
+      const end = jsonStringEnd(text, index);
+      const raw = text.slice(index, end);
+      if (expectKey) {
+        const key = raw.includes('\\') ? JSON.parse(raw) : raw.slice(1, -1);
+        const keys = open[open.length - 1];
+        if (keys.has(key)) {
+          seenDuplicates.count += 1;
+          seenDuplicates.first ??= key;
+        } else {
+          keys.add(key);
+        }
+        expectKey = false;
+      }
+      out.push(raw);
+      index = end;
+    } else { // number, true, false, null
+      let end = index + 1;
+      while (end < length && !isJsonLiteralEnd(text.charCodeAt(end))) end += 1;
+      out.push(text.slice(index, end));
+      index = end;
+    }
+  }
+  return { text: out.join(''), duplicates: seenDuplicates };
+}
+
+function isJsonSpace(code) {
+  return code === 0x20 || code === 0x0A || code === 0x0D || code === 0x09;
+}
+
+function isJsonLiteralEnd(code) {
+  return isJsonSpace(code) || code === 0x2C || code === 0x7D || code === 0x5D;
+}
+
+// Index just past the closing quote of the string opening at `start`.
+function jsonStringEnd(text, start) {
+  let quote = text.indexOf('"', start + 1);
+  for (;;) {
+    let backslashes = 0;
+    while (text.charCodeAt(quote - 1 - backslashes) === 0x5C) backslashes += 1;
+    if (backslashes % 2 === 0) return quote + 1;
+    quote = text.indexOf('"', quote + 1);
+  }
+}
+
+function duplicateKeyWarning({ count, first }) {
+  if (!count) return '';
+  const what = count === 1 ? `a duplicate key ("${first}")` : `${count.toLocaleString()} duplicate keys (first: "${first}")`;
+  return `Formatted and kept ${what}. Most JSON readers, and the tree view, use only the last value.`;
+}
+
+export function formatXmlBestEffort(input) {
+  const started = now();
+  const original = trimOuterXmlWhitespace(String(input ?? ''));
+  if (!original) throw new Error('Nothing to format. Paste or upload a payload first.');
+
+  const rawXml = startsLikeXmlDocument(original);
+  const wrappedEncoding = !rawXml && looksLikeQuotedXmlEncoding(original);
+
+  let cleaned = original;
+  let xmlEncodingChanged = false;
+  let repairedInnerEncoding = false;
+
+  if (!rawXml) {
+    const recoveredXml = recoverEncodedXml(original);
+    cleaned = normalizeEscapedXml(recoveredXml.text);
+    xmlEncodingChanged = recoveredXml.changed || cleaned !== original;
+
+    // Only encoded/wrapped XML gets source-language escape cleanup.
+    // Raw XML backslashes are data and must remain untouched.
+    if (wrappedEncoding) {
+      const normalizedInner = cleaned.replace(/\\+(['&])/g, '$1');
+      repairedInnerEncoding = normalizedInner !== cleaned;
+      cleaned = normalizedInner;
+    }
+  }
+
+  let valid = true;
+  let warning = '';
+  let formatted = '';
+
+  try {
+    formatted = formatAndValidateXml(cleaned);
+  } catch (error) {
+    valid = false;
+    warning = error?.message || 'XML syntax could not be validated.';
+    formatted = prettyXml(cleaned);
+  }
+
+  const normalizedEncoding = xmlEncodingChanged || repairedInnerEncoding || cleaned !== original;
+  return {
+    mode: 'xml',
+    formatted,
+    parsed: null,
+    valid,
+    bestEffort: !valid,
+    repaired: normalizedEncoding || formatted !== original,
+    repairNote: valid
+      ? (normalizedEncoding ? 'Normalized escaped XML input before formatting.' : '')
+      : `Best-effort formatted XML. The payload still has a syntax issue: ${warning}`,
+    warning,
+    ...resultMetrics(formatted),
+    elapsedMs: Math.round(now() - started),
+  };
+}
+
+export function recoverJsonForFormatting(input) {
+  const original = String(input ?? '').trim();
+  if (!original) return { text: original, repaired: false, notes: [] };
+
+  const queue = [{ text: original, notes: [] }];
+  const seen = new Set();
+
+  for (let step = 0, cursor = 0; cursor < queue.length && step < 32; step += 1, cursor += 1) {
+    const current = queue[cursor];
+    const candidate = String(current.text ?? '').trim();
+    if (!candidate || seen.has(candidate)) continue;
+    seen.add(candidate);
+
+    // Strongest proof: if this candidate is already a JSON object/array,
+    // stop immediately. Valid JSON strings are unwrapped and explored rather
+    // than returned as the final formatted payload.
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed && typeof parsed === 'object') {
+        return {
+          text: candidate,
+          repaired: candidate !== original,
+          notes: unique(current.notes),
+        };
+      }
+      if (typeof parsed === 'string') {
+        const nested = parsed.trim();
+        if (nested && !seen.has(nested)) {
+          queue.push({
+            text: nested,
+            notes: [...current.notes, 'unwrapped JSON-string escape layer'],
+          });
+        }
+      }
+    } catch (_) {}
+
+    // Explore an outer literal quote wrapper. This is common when users paste
+    // an encoded string value.
+    const unquoted = stripJsonEncodingWrapperQuotes(candidate);
+    if (unquoted !== candidate && !seen.has(unquoted)) {
+      queue.push({
+        text: unquoted,
+        notes: [...current.notes, 'removed outer encoding quotes'],
+      });
+    }
+
+    // Explore one encoding decode even when heuristic detection is uncertain.
+    // We do not commit to this mutation unless a later candidate proves itself
+    // by parsing as a JSON object/array.
+    if (candidate.includes('\\')) {
+      const decoded = decodeOneEscapeLayer(candidate).trim();
+      if (decoded && decoded !== candidate && !seen.has(decoded)) {
+        queue.push({
+          text: decoded,
+          notes: [...current.notes, 'removed JSON escape layer'],
+        });
+      }
+    }
+
+    // An encoded shape can begin with quote + backslash before
+    // the real JSON document, e.g. "\"\\{...}" or similar outer wrappers.
+    // Explore the slice beginning at the first real object/array delimiter and
+    // accept it only if a later candidate proves to be valid JSON.
+    const embedded = extractEmbeddedJsonCandidate(candidate);
+    if (embedded && embedded !== candidate && !seen.has(embedded)) {
+      queue.push({
+        text: embedded,
+        notes: [...current.notes, 'removed prefix/suffix outside embedded JSON document'],
+      });
+    }
+
+    // Explore a JSON document embedded in harmless surrounding punctuation.
+    const extracted = extractJsonValueWithWrapperTail(candidate);
+    if (extracted && extracted.document !== candidate && !seen.has(extracted.document)) {
+      queue.push({
+        text: extracted.document,
+        notes: [
+          ...current.notes,
+          ...(extracted.removedTail ? ['removed surrounding wrapper punctuation'] : []),
+        ],
+      });
+    }
+
+    // Known encoded-input artifacts and trailing commas are also explored as
+    // candidates, again requiring a successful JSON parse before acceptance.
+    const invalidEscapes = repairKnownInvalidJsonEscapes(candidate);
+    if (invalidEscapes.changed && !seen.has(invalidEscapes.text)) {
+      queue.push({
+        text: invalidEscapes.text,
+        notes: [...current.notes, 'removed non-JSON escape markers inside strings'],
+      });
+    }
+
+    const trailing = removeTrailingJsonCommas(candidate);
+    if (trailing.changed && !seen.has(trailing.text)) {
+      queue.push({
+        text: trailing.text,
+        notes: [...current.notes, 'removed trailing commas'],
+      });
+    }
+  }
+
+  // Fall back to the conservative legacy normalizer for malformed content
+  // where no proof-backed candidate became a valid object/array.
+  const strict = normalizeJsonEncodedInput(original);
+  return strict.repaired
+    ? {
+        text: strict.text,
+        repaired: true,
+        notes: [strict.repairNote || 'normalized escaped JSON encoding data'],
+      }
+    : { text: original, repaired: false, notes: [] };
+}
+export function repairKnownInvalidJsonEscapes(input) {
+  const text = String(input ?? '');
+  const out = [];
+  let inString = false;
+  let escaped = false;
+  let changed = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+
+    if (!inString) {
+      out.push(char);
+      if (char === '"') inString = true;
+      continue;
+    }
+
+    if (escaped) {
+      out.push(char);
+      escaped = false;
+      continue;
+    }
+
+    if (char === '"') {
+      out.push(char);
+      inString = false;
+      continue;
+    }
+
+    if (char === '\\' && index + 1 < text.length) {
+      const next = text[index + 1];
+      if (next === "'" || next === '&') {
+        out.push(next);
+        index += 1;
+        changed = true;
+        continue;
+      }
+      out.push(char);
+      escaped = true;
+      continue;
+    }
+
+    out.push(char);
+  }
+
+  return { text: out.join(''), changed };
+}
+
+export function removeTrailingJsonCommas(input) {
+  const text = String(input ?? '');
+  const out = [];
+  let inString = false;
+  let escaped = false;
+  let changed = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+
+    if (inString) {
+      out.push(char);
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      out.push(char);
+      continue;
+    }
+
+    if (char === ',') {
+      let cursor = index + 1;
+      while (cursor < text.length && /\s/.test(text[cursor])) cursor += 1;
+      if (text[cursor] === '}' || text[cursor] === ']') {
+        changed = true;
+        continue;
+      }
+    }
+
+    out.push(char);
+  }
+
+  return { text: out.join(''), changed };
+}
+
+export function prettyJsonLoose(input) {
+  const text = String(input ?? '').trim();
+  if (!text) return '';
+
+  const lines = [];
+  let current = '';
+  let depth = 0;
+  let stringQuote = '';
+  let escaped = false;
+  let lineComment = false;
+  let blockComment = false;
+
+  const write = (value) => { current += value; };
+  const trimRight = () => { current = current.replace(/[ \t]+$/g, ''); };
+  const newline = () => {
+    trimRight();
+    // Indent depth is capped (like the XML formatter's 255 cap): without it
+    // each line's indent grows with depth and deep input turns quadratic.
+    const capped = Math.min(PRETTY_LOOSE_INDENT_CAP, Math.max(0, depth));
+    if (current.trim()) lines.push(`${'  '.repeat(capped)}${current.trimStart()}`);
+    current = '';
+  };
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1] || '';
+
+    if (lineComment) {
+      if (char === '\n') {
+        lineComment = false;
+        newline();
+      } else {
+        write(char);
+      }
+      continue;
+    }
+
+    if (blockComment) {
+      write(char);
+      if (char === '*' && next === '/') {
+        write('/');
+        index += 1;
+        blockComment = false;
+      }
+      continue;
+    }
+
+    if (stringQuote) {
+      write(char);
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === stringQuote) stringQuote = '';
+      continue;
+    }
+
+    if (char === '"' || char === "'") {
+      stringQuote = char;
+      write(char);
+      continue;
+    }
+
+    if (char === '/' && next === '/') {
+      write('//');
+      index += 1;
+      lineComment = true;
+      continue;
+    }
+
+    if (char === '/' && next === '*') {
+      write('/*');
+      index += 1;
+      blockComment = true;
+      continue;
+    }
+
+    if (char === '{' || char === '[') {
+      trimRight();
+      write(char);
+      newline();
+      depth += 1;
+      // The loose path is for malformed input: refuse to pretty-print
+      // absurd nesting instead of building a quadratic blob.
+      if (depth > PRETTY_LOOSE_MAX_DEPTH) throw tooDeepJsonError();
+      continue;
+    }
+
+    if (char === '}' || char === ']') {
+      if (current.trim()) newline();
+      depth = Math.max(0, depth - 1);
+      write(char);
+      continue;
+    }
+
+    if (char === ',') {
+      trimRight();
+      write(',');
+      newline();
+      continue;
+    }
+
+    if (char === ':') {
+      trimRight();
+      write(': ');
+      continue;
+    }
+
+    if (/\s/.test(char)) {
+      if (current && !/[ \t]$/.test(current)) write(' ');
+      continue;
+    }
+
+    write(char);
+  }
+
+  if (current.trim()) newline();
+  return lines.join('\n');
+}
+
+function parseJsonDocument(text) {
+  let value = JSON.parse(text);
+  // The JSON text that produced `value`, so formatting can keep its spelling.
+  let source = text;
+  let layers = 0;
+  let repairedNested = false;
+
+  // JSON content can itself be nested inside a JSON string:
+  // "{\"items\":[...]}". Parsing only once returns a JavaScript string. The
+  // decoded inner document can still contain additional escape patterns such as
+  // \' or trailing commas, so repair only that decoded JSON document before the
+  // next parse rather than re-stringifying it as one escaped line.
+  while (typeof value === 'string' && layers < 3) {
+    let nested = value.trim();
+
+    // Some nested wrappers decode only one escape layer at a time.
+    // Example: the outer JSON string parses successfully, but its value is
+    // still {\\"key\\":1}. Treat that as another encoding layer instead
+    // of accepting the whole payload as one ordinary string.
+    if (!looksLikeJsonDocumentText(nested) && looksLikeEncodedJson(nested)) {
+      const decoded = decodeOneEscapeLayer(nested);
+      if (decoded !== nested) {
+        nested = decoded.trim();
+        repairedNested = true;
+      }
+    }
+
+    if (!looksLikeJsonDocumentText(nested)) break;
+
+    try {
+      value = JSON.parse(nested);
+      source = nested;
+    } catch (firstError) {
+      const invalidEscapes = repairKnownInvalidJsonEscapes(nested);
+      const trailingCommas = removeTrailingJsonCommas(invalidEscapes.text);
+      if (!invalidEscapes.changed && !trailingCommas.changed) throw firstError;
+      value = JSON.parse(trailingCommas.text);
+      source = trailingCommas.text;
+      repairedNested = true;
+    }
+    layers += 1;
+  }
+
+  return { value, source, layers, repairedNested };
+}
+
+function unwrapJsonTextForLooseFormatting(input) {
+  return recoverJsonForFormatting(input).text;
+}
+
+function extractEmbeddedJsonCandidate(input) {
+  const text = String(input ?? '').trim();
+  if (!text) return '';
+
+  const objectStart = text.indexOf('{');
+  const arrayStart = text.indexOf('[');
+  let start = -1;
+  if (objectStart >= 0 && arrayStart >= 0) start = Math.min(objectStart, arrayStart);
+  else start = Math.max(objectStart, arrayStart);
+  if (start <= 0) return '';
+
+  const opener = text[start];
+  const closer = opener === '{' ? '}' : ']';
+
+  // Use the final matching delimiter as a candidate boundary. Any remaining
+  // prefix/suffix is treated as encoding noise only after JSON.parse proves
+  // the sliced value is a real document.
+  const end = text.lastIndexOf(closer);
+  if (end <= start) return '';
+
+  return text.slice(start, end + 1).trim();
+}
+
+function stripJsonEncodingWrapperQuotes(input) {
+  const text = String(input ?? '').trim();
+  if (text.length < 3) return text;
+
+  // Standard literal quote wrapper.
+  if ((text[0] === '"' && text[text.length - 1] === '"')
+      || (text[0] === "'" && text[text.length - 1] === "'")) {
+    const inner = text.slice(1, -1).trim();
+    if (looksLikeJsonDocumentText(inner) || looksLikeEncodedJson(inner)) return inner;
+  }
+
+  // An encoded value can contain escaped quote characters around the
+  // entire document: \"{...}\".
+  if (text.startsWith('\\\"') && text.endsWith('\\\"')) {
+    const inner = text.slice(2, -2).trim();
+    if (looksLikeJsonDocumentText(inner) || looksLikeEncodedJson(inner)) return inner;
+  }
+
+  return text;
+}
+
+function looksLikeQuotedJsonEncoding(input) {
+  const text = String(input ?? '').trim();
+  if (text.length < 3) return false;
+  const unquoted = stripJsonEncodingWrapperQuotes(text);
+  return unquoted !== text;
+}
+
+function looksLikeJsonDocumentText(input) {
+  const text = String(input ?? '').trim();
+  return text.startsWith('{') || text.startsWith('[');
+}
+
+function recoverEncodedXml(input) {
+  const original = String(input ?? '').trim();
+  const queue = [original];
+  const seen = new Set();
+
+  for (let step = 0, cursor = 0; cursor < queue.length && step < 24; step += 1, cursor += 1) {
+    const candidate = String(queue[cursor] ?? '').trim();
+    if (!candidate || seen.has(candidate)) continue;
+    seen.add(candidate);
+
+    const normalized = normalizeEscapedXml(candidate);
+    if (startsLikeXmlDocument(normalized)) {
+      try {
+        validateXmlLight(normalized);
+        return { text: candidate, changed: candidate !== original };
+      } catch (_) {}
+    }
+
+    try {
+      const parsed = JSON.parse(candidate);
+      if (typeof parsed === 'string' && parsed.trim()) queue.push(parsed.trim());
+    } catch (_) {}
+
+    if (candidate.includes('\\')) {
+      const decoded = decodeOneEscapeLayer(candidate).trim();
+      if (decoded && decoded !== candidate) queue.push(decoded);
+    }
+
+    if (
+      candidate.length >= 2
+      && ((candidate.startsWith('"') && candidate.endsWith('"'))
+        || (candidate.startsWith("'") && candidate.endsWith("'")))
+    ) {
+      queue.push(candidate.slice(1, -1).trim());
+    }
+  }
+
+  return { text: original, changed: false };
+}
+
+function startsLikeXmlDocument(input) {
+  const text = String(input ?? '');
+  let index = 0;
+
+  if (text.charCodeAt(0) === 0xFEFF) index = 1;
+  while (index < text.length) {
+    const code = text.charCodeAt(index);
+    if (code !== 32 && code !== 9 && code !== 10 && code !== 13) break;
+    index += 1;
+  }
+
+  return text.charCodeAt(index) === 60;
+}
+
+function looksLikeQuotedXmlEncoding(input) {
+  const text = String(input ?? '').trim();
+  return text.length >= 2 && text.startsWith('"') && text.endsWith('"') && text.includes('<');
+}
+
+function looksLikeEncodedJson(input) {
+  const text = String(input ?? '').trimStart();
+  if (!text || (text[0] !== '{' && text[0] !== '[')) return false;
+  const firstQuote = text.indexOf('"', 1);
+  if (firstQuote < 0 || firstQuote > 96) return false;
+  let slashCount = 0;
+  for (let index = firstQuote - 1; index >= 0 && text[index] === '\\'; index -= 1) slashCount += 1;
+  return slashCount > 0;
+}
+
+function addAttempt(attempts, text, notes) {
+  if (!text || attempts.some((attempt) => attempt.text === text)) return;
+  attempts.push({ text, notes: unique(notes.filter(Boolean)) });
+}
+
+function unique(values) {
+  return [...new Set(values)];
+}
+
+function resultMetrics(text) {
+  if (text.length >= LARGE_RESULT_METRICS_CHARS) {
+    return { lineCount: null, bytes: null, largeResult: true };
+  }
+  return {
+    lineCount: countLines(text),
+    bytes: byteLength(text),
+    largeResult: false,
+  };
+}
+
+function trimOuterXmlWhitespace(text) {
+  let start = 0;
+  let end = text.length;
+
+  while (start < end) {
+    const code = text.charCodeAt(start);
+    if (code !== 32 && code !== 9 && code !== 10 && code !== 13) break;
+    start += 1;
+  }
+  while (end > start) {
+    const code = text.charCodeAt(end - 1);
+    if (code !== 32 && code !== 9 && code !== 10 && code !== 13) break;
+    end -= 1;
+  }
+
+  return start === 0 && end === text.length ? text : text.slice(start, end);
+}
+
+function countLines(text) {
+  if (!text) return 0;
+  let count = 1;
+  for (let index = 0; index < text.length; index += 1) {
+    if (text.charCodeAt(index) === 10) count += 1;
+  }
+  return count;
+}
+
+function byteLength(text) {
+  if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(text).length;
+  return Buffer.byteLength(text, 'utf8');
+}
+
+function now() {
+  return typeof performance !== 'undefined' ? performance.now() : Date.now();
+}
