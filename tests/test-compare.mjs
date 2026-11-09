@@ -538,6 +538,40 @@ assert.match(host.querySelector('.compare-foot .compare-caret').textContent, /^L
 showBox.click();
 assert.equal(host.querySelector('.compare-detail').hidden, true);
 
+// Wrap: long lines wrap, and spacers keep each row level with its partner.
+const wrapBtn = [...host.querySelectorAll('.compare-bar button')].find((button) => button.textContent === 'Wrap');
+assert.ok(wrapBtn, 'Compare has a Wrap button');
+assert.equal(wrapBtn.getAttribute('aria-pressed'), 'false', 'off to start');
+const longValue = 'word '.repeat(80).trim();
+await setRaws(pretty({ a: longValue, b: 1 }), pretty({ a: 'short', b: 1 }));
+const spacerHeights = (side) => [...side.view.dom.querySelectorAll('.compare-spacer')].map((spacer) => Number.parseFloat(spacer.style.height));
+assert.deepEqual(spacerHeights(right), [], 'unwrapped, a changed line needs no spacer');
+wrapBtn.click();
+await wait(120);
+assert.equal(wrapBtn.getAttribute('aria-pressed'), 'true');
+assert.ok(left.view.contentDOM.classList.contains('cm-lineWrapping') && right.view.contentDOM.classList.contains('cm-lineWrapping'), 'both panes wrap');
+assert.equal(JSON.parse(dom.window.localStorage.getItem('payload-formatter:compare-options:v1')).wrap, true, 'and it is remembered');
+// (Spacer heights come from real line heights, which jsdom doesn't lay out;
+// row alignment is checked in a browser.)
+await setRaws(pretty({ a: 1, b: 1 }), pretty({ a: 1, b: 1 }));
+assert.deepEqual([...spacerHeights(left), ...spacerHeights(right)], [], 'matching text needs no spacers');
+// Deleting lines leaves the comparison briefly out of date; measuring from it
+// then would point at lines that are gone.
+await setRaws(pretty({ a: longValue, b: 2, c: 3, d: 4 }), pretty({ a: 'short', b: 2, c: 3, d: 4 }));
+right.view.dispatch({ changes: { from: 0, to: right.view.state.doc.length, insert: '' } });
+await wait(80);
+assert.equal(right.view.state.doc.length, 0, 'an edit right after wrapping is safe');
+right.view.dispatch({ changes: { from: 0, insert: pretty({ a: 'short' }) } });
+await wait(20);
+wrapBtn.click();
+await wait(120);
+assert.equal(wrapBtn.getAttribute('aria-pressed'), 'false', 'turning Wrap off right after an edit is safe');
+assert.ok(!left.view.contentDOM.classList.contains('cm-lineWrapping'));
+await wait(400);
+await setRaws(pretty({ a: longValue, b: 1 }), pretty({ a: 'short', b: 1 }));
+assert.deepEqual(spacerHeights(right), [], 'and rows are back to one line each');
+await setRaws('{"a":1}', '{"a":2}');
+
 // Each pane has a path bar that follows its own cursor and the current difference.
 await setRaws(pretty({ a: { b: [1, 2] }, c: 1 }), pretty({ a: { b: [1, 3] }, c: 1 }));
 const crumbText = (side) => side.crumbs.textContent;

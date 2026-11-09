@@ -30,7 +30,7 @@ import {
   json,
   xml,
 } from '../../vendor/codemirror/codemirror.js';
-import { editorTheme, highlightStyle } from '../editor/text-editor.js';
+import { editorTheme, highlightStyle, wrapExtension } from '../editor/text-editor.js';
 import { compareTexts, inlineDiff, KIND } from './compare-diff.js';
 import { detectMode, normalizePayload } from './compare-normalize.js';
 import { jsonPathSegments, xmlPathSegments } from './compare-path.js';
@@ -71,6 +71,7 @@ const DEFAULT_NAMES = { left: 'Left', right: 'Right' };
 const MAX_NAME_LENGTH = 40;
 const DEFAULT_OPTIONS = {
   format: true,
+  wrap: false,
   sortKeys: false,
   sortArrays: false,
   ignoreWhitespace: false,
@@ -94,23 +95,25 @@ const MARKERS = {
 };
 const undoBinding = historyKeymap.find((binding) => binding.key === 'Mod-z');
 
+// Fills the height of rows only the other side has. With wrapping on, it also
+// tops up a line that takes fewer screen rows than its partner.
 class SpacerWidget extends WidgetType {
-  constructor(lines) {
+  constructor(height) {
     super();
-    this.lines = lines;
+    this.height = height;
   }
 
-  eq(other) { return other.lines === this.lines; }
+  eq(other) { return other.height === this.height; }
 
   toDOM() {
     const element = document.createElement('div');
     element.className = 'compare-spacer';
-    element.style.height = `${this.lines * LINE_HEIGHT}px`;
+    element.style.height = `${this.height}px`;
     element.setAttribute('aria-hidden', 'true');
     return element;
   }
 
-  get estimatedHeight() { return this.lines * LINE_HEIGHT; }
+  get estimatedHeight() { return this.height; }
   ignoreEvent() { return true; }
 }
 
@@ -261,6 +264,13 @@ export function initCompare({ host, storageScope = 'tab', windows, activeWindowI
   const swapBtn = el('button', { type: 'button', class: 'strip-btn compare-swap', title: 'Swap left and right', text: 'Swap' });
   const findBtn = el('button', { type: 'button', class: 'strip-btn', title: 'Find in both sides (Ctrl/Cmd+F)', text: 'Find' });
 
+  const wrapBtn = el('button', { type: 'button', class: 'strip-btn', 'aria-pressed': String(!!options.wrap), title: 'Wrap long lines. Rows stay lined up across both sides.', text: 'Wrap' });
+  wrapBtn.addEventListener('click', () => {
+    options.wrap = !options.wrap;
+    saveOptions();
+    applyWrap();
+  });
+
   const optionButton = (key, label, title) => {
     const button = el('button', { type: 'button', class: 'strip-btn', 'aria-pressed': String(!!options[key]), title, text: label });
     button.addEventListener('click', () => {
@@ -375,7 +385,7 @@ export function initCompare({ host, storageScope = 'tab', windows, activeWindowI
     ignoreMenu,
     showMenu);
   const bar = el('div', { class: 'compare-bar', role: 'group', 'aria-label': 'Compare' },
-    el('div', { class: 'compare-nav' }, prevBtn, nextBtn), position, summary, el('span', { class: 'compare-grow' }), findBtn, optionsGroup, swapBtn, copyMenu);
+    el('div', { class: 'compare-nav' }, prevBtn, nextBtn), position, summary, el('span', { class: 'compare-grow' }), findBtn, wrapBtn, optionsGroup, swapBtn, copyMenu);
   strip.append(bar);
   updateIgnoreLabel();
 
@@ -411,7 +421,7 @@ export function initCompare({ host, storageScope = 'tab', windows, activeWindowI
       el('div', { class: 'compare-foot' }, caret, el('span', { class: 'compare-grow' }), meta, status));
     return {
       key, name: '', nameBtn, nameText, pane, select, meta, status, statusKey: '', caret, caretTimer: 0, crumbs, copyPathBtn, pathText: '', pasteBtn, openBtn, fileInput, clearBtn, editorHost, empty,
-      raw: '', savedRaw: '', previous: null, mode: null, view: null, language: new Compartment(),
+      raw: '', savedRaw: '', previous: null, mode: null, view: null, language: new Compartment(), wrapping: new Compartment(), layoutKey: '', startPad: 0,
     };
   };
   function showStatus(side, key) {
@@ -695,37 +705,190 @@ export function initCompare({ host, storageScope = 'tab', windows, activeWindowI
     return hidden > 0 ? { first, hidden } : null;
   }
 
+  // How tall a line's own text is on screen, leaving out spacers next to it.
+  // A line the editor has drawn is measured. Any other is guessed from its
+  // length, a guess that stays put: the editor's own guesses shift as spacers
+  // come and go, which would keep changing the layout.
+  function rowsPerLine(view) {
+    const width = view.contentDOM.getBoundingClientRect().width - 24;
+    return Math.max(20, Math.floor(width / (view.defaultCharacterWidth || 8)));
+  }
+
+  function textHeight(view, index, columns) {
+    const { doc } = view.state;
+    if (index >= doc.lines) return 0;
+    const line = doc.line(index + 1);
+    const { viewport } = view;
+    if (line.to < viewport.from || line.from > viewport.to) return Math.max(1, Math.ceil(line.length / columns)) * LINE_HEIGHT;
+    const block = view.lineBlockAt(line.from);
+    if (!Array.isArray(block.type)) return block.height;
+    let height = 0;
+    for (const part of block.type) if (!part.widget) height += part.height;
+    return height;
+  }
+
   // Spacers for lines only the other side has, and folds for "Only differences".
+  // With wrapping, a line can take several screen rows, so spacers are sized
+  // from the real heights, and the shorter line of each pair is topped up.
   function layoutFor(side) {
     const isLeft = side === left;
     const { doc } = side.view.state;
     const ranges = [];
+    const keys = [];
+    side.layoutKey = '';
     if (!result) return Decoration.none;
+    const wrap = !!options.wrap;
+    const other = otherSide(side);
+    const otherDoc = other.view.state.doc;
     const empty = doc.length === 0;
+    const ownColumns = wrap ? rowsPerLine(side.view) : 0;
+    const otherColumns = wrap ? rowsPerLine(other.view) : 0;
+    const ownHeight = (index) => textHeight(side.view, index, ownColumns);
+    const otherHeight = (index) => textHeight(other.view, index, otherColumns);
     const lineStart = (index) => (index < doc.lines ? doc.line(index + 1).from : doc.length);
-    const spacer = (index, lines) => {
-      if (lines <= 0) return;
+    const block = (height, pos, after) => {
+      const px = Math.round(height);
+      if (px <= 0) return;
+      ranges.push(Decoration.widget({ widget: new SpacerWidget(px), block: true, side: after ? 1 : -1 }).range(pos));
+      keys.push(`${pos}${after ? '+' : '-'}${px}`);
+    };
+    const spacer = (index, height) => {
       const atEnd = empty || index >= doc.lines;
-      ranges.push(Decoration.widget({ widget: new SpacerWidget(lines), block: true, side: atEnd ? 1 : -1 }).range(atEnd ? doc.length : lineStart(index)));
+      block(height, atEnd ? doc.length : lineStart(index), atEnd);
     };
     const { ops } = result;
     ops.forEach((op, index) => {
       const count = isLeft ? op.lc : op.rc;
       const otherCount = isLeft ? op.rc : op.lc;
       const start = isLeft ? op.l : op.r;
-      // An empty document still occupies one (empty) line in the editor.
-      if (count < otherCount) spacer(start + count, otherCount - count - (empty && index === 0 ? 1 : 0));
+      const otherStart = isLeft ? op.r : op.l;
       const fold = foldRange(op, index);
+      if (count < otherCount) {
+        // An empty document still occupies one (empty) line in the editor.
+        const ownEmptyLine = empty && index === 0;
+        if (wrap) {
+          let height = ownEmptyLine ? -ownHeight(0) : 0;
+          for (let row = count; row < otherCount; row += 1) height += otherHeight(otherStart + row);
+          spacer(start + count, height);
+        } else {
+          spacer(start + count, (otherCount - count - (ownEmptyLine ? 1 : 0)) * LINE_HEIGHT);
+        }
+      }
+      if (wrap) {
+        const paired = Math.min(count, otherCount);
+        for (let row = 0; row < paired; row += 1) {
+          if (fold && row >= fold.first && row < fold.first + fold.hidden) continue;
+          // Text edited since the comparison ran can have fewer lines.
+          if (start + row >= doc.lines || otherStart + row >= otherDoc.lines) break;
+          const own = doc.line(start + row + 1);
+          // The same text wraps the same way, as both panes are the same width.
+          if (own.text === otherDoc.line(otherStart + row + 1).text) continue;
+          block(otherHeight(otherStart + row) - ownHeight(start + row), own.to, true);
+        }
+      }
       if (fold) {
         const from = doc.line(start + fold.first + 1).from;
         const to = doc.line(start + fold.first + fold.hidden).to;
         ranges.push(Decoration.replace({ widget: new FoldWidget(fold.hidden, index, expandFold), block: true }).range(from, to));
+        keys.push(`f${from}`);
       }
     });
+    // Heights of lines not drawn yet are guesses, so the rows above the screen
+    // may add up differently on each side. Room at the very top evens them up,
+    // so the rows on screen sit at the same height in both panes.
+    if (wrap && side.startPad > 0) block(side.startPad, 0, false);
+    side.layoutKey = keys.join(',');
     return Decoration.set(ranges, true);
   }
 
+  // Line numbers take more room with more digits. With wrapping, both panes
+  // must be the same width so the same text wraps the same way.
+  function matchGutters() {
+    const gutters = sides.map((side) => side.view.dom.querySelector('.cm-gutters')).filter(Boolean);
+    for (const gutter of gutters) gutter.style.minWidth = '';
+    if (!options.wrap || gutters.length < 2) return;
+    const widest = Math.max(...gutters.map((gutter) => gutter.getBoundingClientRect().width));
+    if (widest > 0) for (const gutter of gutters) gutter.style.minWidth = `${widest}px`;
+  }
+
+  // Lines measured as they come into view can change how tall a row is. The
+  // layout follows, and a changed layout is only applied when it differs.
+  let wrapTimer = 0;
+  function scheduleWrapLayout() {
+    if (wrapTimer || !options.wrap || !result) return;
+    wrapTimer = setTimeout(() => {
+      wrapTimer = 0;
+      if (!options.wrap || !result || !active) return;
+      if (sides.some((side, index) => side.view.state.doc !== paintedDocs[index])) return;
+      matchGutters();
+      let changed = false;
+      const relayout = (side) => {
+        const before = side.layoutKey;
+        const layout = layoutFor(side);
+        if (side.layoutKey === before) return;
+        changed = true;
+        side.view.dispatch({ effects: setLayout.of(layout) });
+      };
+      for (const side of sides) relayout(side);
+      const offset = rowsAboveOffset();
+      if (offset !== null) {
+        const pads = offset > 0 ? [0, offset] : [-offset, 0];
+        sides.forEach((side, index) => {
+          if (Math.abs(pads[index] - side.startPad) <= 1) return;
+          side.startPad = pads[index];
+          relayout(side);
+        });
+      }
+      if (changed) {
+        drawMap();
+        syncScroll();
+      }
+    }, 30);
+  }
+
+  // Where a line's text starts, below any spacer in front of it.
+  function textTop(view, index) {
+    const block = view.lineBlockAt(view.state.doc.line(index + 1).from);
+    if (!Array.isArray(block.type)) return block.top;
+    return (block.type.find((part) => !part.widget) ?? block).top;
+  }
+
+  // How much lower a row near the top of the screen sits on the left than on
+  // the right, not counting the room already added at the top.
+  function rowsAboveOffset() {
+    const { view } = left;
+    const { doc } = view.state;
+    let block = view.lineBlockAtHeight(view.scrollDOM.scrollTop);
+    for (let tries = 0; tries < ALIGN_SEARCH_ROWS; tries += 1) {
+      const line = doc.lineAt(block.from).number - 1;
+      const found = opAt(true, line);
+      if (found && found.op.lc && found.op.rc && line - found.op.l < found.op.rc) {
+        const other = found.op.r + (line - found.op.l);
+        if (other >= right.view.state.doc.lines) return null;
+        return Math.round((textTop(view, line) - left.startPad) - (textTop(right.view, other) - right.startPad));
+      }
+      if (block.to >= doc.length) return null;
+      block = view.lineBlockAt(block.to + 1);
+    }
+    return null;
+  }
+
+  function applyWrap() {
+    wrapBtn.setAttribute('aria-pressed', String(!!options.wrap));
+    panel.dataset.wrap = options.wrap ? 'on' : 'off';
+    for (const side of sides) side.startPad = 0;
+    for (const side of sides) side.view.dispatch({ effects: side.wrapping.reconfigure(options.wrap ? wrapExtension : []) });
+    matchGutters();
+    // Right after an edit the comparison is about to run again and lays out then.
+    if (sides.every((side, index) => side.view.state.doc === paintedDocs[index])) paintLayout();
+    scheduleWrapLayout();
+  }
+
+  // The texts the current layout was made for. The comparison describes those,
+  // so after an edit nothing may re-measure from it until it has run again.
+  let paintedDocs = [];
   function paintLayout() {
+    paintedDocs = sides.map((side) => side.view.state.doc);
     for (const side of sides) {
       side.view.dispatch({ effects: [setLayout.of(layoutFor(side)), repaint.of(null)] });
     }
@@ -762,7 +925,7 @@ export function initCompare({ host, storageScope = 'tab', windows, activeWindowI
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
     context.clearRect(0, 0, width, height);
     if (!result) return;
-    const total = rowStarts[result.ops.length] || 1;
+    const place = mapPlacement();
     const styles = getComputedStyle(root);
     const colors = {
       [KIND.ADDED]: styles.getPropertyValue('--compare-added-map'),
@@ -773,8 +936,32 @@ export function initCompare({ host, storageScope = 'tab', windows, activeWindowI
     result.ops.forEach((op, index) => {
       if (!colors[op.kind] || !kindShown(op.kind)) return;
       context.fillStyle = colors[op.kind];
-      context.fillRect(2, (rowStarts[index] / total) * height, width - 4, Math.max(2, (rowsOf(op) / total) * height));
+      const { top, size } = place(index);
+      context.fillRect(2, top * height, width - 4, Math.max(2, size * height));
     });
+  }
+
+  // Where each block of rows sits in the map, as fractions of the whole.
+  function mapPlacement() {
+    const total = rowStarts[result.ops.length] || 1;
+    const byRows = (index) => ({ top: rowStarts[index] / total, size: rowsOf(result.ops[index]) / total });
+    if (!options.wrap || options.onlyDifferences) return byRows;
+    // A row's top, read from whichever side has a line there.
+    const topOf = (index) => {
+      const op = result.ops[index];
+      if (!op) return null;
+      const side = op.lc ? left : right;
+      const line = op.lc ? op.l : op.r;
+      if (line >= side.view.state.doc.lines) return null;
+      return textTop(side.view, line);
+    };
+    const height = left.view.contentHeight || 1;
+    return (index) => {
+      const top = topOf(index);
+      if (top === null) return byRows(index);
+      const next = topOf(index + 1) ?? height;
+      return { top: top / height, size: Math.max(0, next - top) / height };
+    };
   }
 
   map.addEventListener('click', (event) => {
@@ -1015,6 +1202,7 @@ export function initCompare({ host, storageScope = 'tab', windows, activeWindowI
       syntaxHighlighting(highlightStyle),
       EditorState.tabSize.of(2),
       side.language.of(languageFor(side.mode)),
+      side.wrapping.of(options.wrap ? wrapExtension : []),
       layoutField,
       painter(side),
       editorTheme,
@@ -1057,7 +1245,8 @@ export function initCompare({ host, storageScope = 'tab', windows, activeWindowI
             if (side.view.hasFocus) updateDetail(side);
           }, CARET_DELAY_MS);
         }
-        if ((update.viewportChanged || update.geometryChanged) && leader && update.view.scrollDOM.scrollHeight >= COMPRESSED_HEIGHT) syncScroll();
+        if ((update.viewportChanged || update.geometryChanged) && leader && (options.wrap || update.view.scrollDOM.scrollHeight >= COMPRESSED_HEIGHT)) syncScroll();
+        if (update.heightChanged || update.geometryChanged || update.viewportChanged) scheduleWrapLayout();
       }),
     ];
   }
@@ -1216,7 +1405,9 @@ export function initCompare({ host, storageScope = 'tab', windows, activeWindowI
     const source = leader.view.scrollDOM;
     const target = follower.view.scrollDOM;
     target.scrollLeft = source.scrollLeft;
-    const alignment = result && source.scrollHeight >= COMPRESSED_HEIGHT ? rowAlignment(follower) : null;
+    // With wrapping, heights of rows not drawn yet are estimates, so the same
+    // scroll position isn't the same row: line up the row at the top instead.
+    const alignment = result && (options.wrap || source.scrollHeight >= COMPRESSED_HEIGHT) ? rowAlignment(follower) : null;
     if (!alignment) {
       target.scrollTop = source.scrollTop;
     } else if (alignment.scrollTo !== undefined) {
@@ -1250,7 +1441,9 @@ export function initCompare({ host, storageScope = 'tab', windows, activeWindowI
     const { doc } = side.view.state;
     const from = doc.line(Math.min(line + 1, doc.lines)).from;
     leader = side;
-    if (side.view.scrollDOM.scrollHeight >= COMPRESSED_HEIGHT) {
+    // Wrapped rows not drawn yet only have estimated heights: let the editor
+    // measure as it scrolls.
+    if (options.wrap || side.view.scrollDOM.scrollHeight >= COMPRESSED_HEIGHT) {
       side.view.dispatch({ effects: EditorView.scrollIntoView(from, { y: 'center' }) });
       return;
     }

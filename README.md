@@ -42,6 +42,7 @@ A fast JSON and XML formatter that runs entirely in your browser. Paste a payloa
 - Sort JSON keys, keeping every key and value as written, including duplicates
 - Ignore menu: spaces, case, blank lines, the same value spelled differently (`1.0` and `1`, `\u00e9` and `é`), array order, and fields you name, such as timestamps and trace IDs. Ignored lines stay on screen marked `≈`, and the summary counts them
 - Show menu: only the differences (click a hidden section to open it), a line detail panel showing long lines in full, and which kinds of change to highlight and step through
+- Wrap: long lines wrap in both panes, and each row stays level with its partner on the other side
 - Find across both sides, and `:120` to go to a line
 - A path bar on each side showing where the cursor or current difference sits, with Copy path, plus the line and column under each pane
 - Copy a side exactly as pasted, or copy the differences as a unified diff
