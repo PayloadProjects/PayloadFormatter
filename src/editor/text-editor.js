@@ -188,7 +188,7 @@ const hangingIndent = ViewPlugin.fromClass(class {
   }
 }, { decorations: (plugin) => plugin.decorations });
 
-const wrapExtension = [EditorView.lineWrapping, hangingIndent];
+export const wrapExtension = [EditorView.lineWrapping, hangingIndent];
 
 // What the cursor sits on, read from the parser's syntax tree (only the
 // part already parsed, so this never parses the whole document):
